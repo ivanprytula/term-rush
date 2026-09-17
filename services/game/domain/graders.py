@@ -13,11 +13,12 @@ from __future__ import annotations
 import re
 from typing import Protocol
 
-from domain.outcome import GradeOutcome
-from domain.outcome import MatchedVia
-from domain.outcome import RubricBreakdown
-from domain.outcome import Verdict
-from domain.term import Term
+from . import constants
+from .outcome import GradeOutcome
+from .outcome import MatchedVia
+from .outcome import RubricBreakdown
+from .outcome import Verdict
+from .term import Term
 
 # Tuned against the prototype's behaviour; see tests/unit/test_graders.py which
 # pins the original similarity() results as a regression oracle.
@@ -139,7 +140,7 @@ class FuzzyGrader:
             return GradeOutcome(
                 verdict=Verdict.PARTIAL,
                 rubric=RubricBreakdown(
-                    expansion=int(RubricBreakdown.EXPANSION_WEIGHT * best),
+                    expansion=int(constants.EXPANSION_WEIGHT * best),
                     concept=0,
                     purpose=0,
                     example=0,

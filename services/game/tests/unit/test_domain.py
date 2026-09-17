@@ -11,6 +11,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from domain import constants
 from domain.graders import AliasGrader
 from domain.graders import AnswerEvaluator
 from domain.graders import ExactGrader
@@ -99,7 +100,7 @@ class TestExactGrader:
         assert outcome is not None
         assert outcome.verdict is Verdict.CORRECT
         assert outcome.matched_via is MatchedVia.EXACT
-        assert outcome.rubric.expansion == RubricBreakdown.EXPANSION_WEIGHT
+        assert outcome.rubric.expansion == constants.EXPANSION_WEIGHT
 
     def test_ignores_case_and_punctuation(self, uow_term: Term) -> None:
         assert ExactGrader().grade("  unit OF work!  ", uow_term) is not None
@@ -133,7 +134,7 @@ class TestFuzzyGrader:
         outcome = FuzzyGrader().grade("work of the unit thing", uow_term)
         assert outcome is not None
         assert outcome.verdict is Verdict.PARTIAL
-        assert 0 < outcome.rubric.expansion < RubricBreakdown.EXPANSION_WEIGHT
+        assert 0 < outcome.rubric.expansion < constants.EXPANSION_WEIGHT
 
     def test_rejects_unrelated(self, uow_term: Term) -> None:
         outcome = FuzzyGrader().grade("a kind of sandwich", uow_term)
@@ -152,7 +153,7 @@ class TestFuzzyGrader:
         outcome = FuzzyGrader().grade("Unit", uow_term)
         assert outcome is not None
         assert outcome.verdict is Verdict.CORRECT
-        assert outcome.rubric.total == RubricBreakdown.EXPANSION_WEIGHT
+        assert outcome.rubric.total == constants.EXPANSION_WEIGHT
         assert outcome.rubric.concept == 0
 
 
@@ -186,10 +187,10 @@ class TestAnswerEvaluator:
 class TestRubricBreakdown:
     def test_weights_sum_to_one_hundred(self) -> None:
         assert (
-            RubricBreakdown.EXPANSION_WEIGHT
-            + RubricBreakdown.CONCEPT_WEIGHT
-            + RubricBreakdown.PURPOSE_WEIGHT
-            + RubricBreakdown.EXAMPLE_WEIGHT
+            constants.EXPANSION_WEIGHT
+            + constants.CONCEPT_WEIGHT
+            + constants.PURPOSE_WEIGHT
+            + constants.EXAMPLE_WEIGHT
         ) == 100
 
     def test_understanding_outscores_memorization(self) -> None:

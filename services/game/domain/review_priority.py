@@ -5,13 +5,13 @@ from __future__ import annotations
 from pydantic import BaseModel
 from pydantic import Field
 
+from domain import constants
 from domain.outcome import GradeOutcome
 
 # A term is "weak" below this rubric score. 70 = knows the concept, not just
 # the expansion (30) — see RubricBreakdown weights.
 WEAK_SCORE_THRESHOLD = 70
-
-RECENT_WINDOW = 10
+RECENT_WINDOW = constants.RECENT_WINDOW_DAYS
 
 
 class TermPerformance(BaseModel):

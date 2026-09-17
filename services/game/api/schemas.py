@@ -1,0 +1,105 @@
+"""Request and response schemas for the API.
+
+Validation happens here; the use cases work with validated domain objects.
+All bounds sourced from domain.constants for consistency.
+"""
+
+from __future__ import annotations
+
+from pydantic import BaseModel
+from pydantic import Field
+
+from domain import constants
+from domain.outcome import GradeOutcome
+
+
+class SubmitAnswerRequest(BaseModel):
+    """Answer submission for grading.
+
+    term_id: The term to grade against (1-64 chars).
+    answer: The student's explanation (1-512 chars).
+    """
+
+    term_id: str = Field(
+        min_length=constants.TERM_ID_MIN_LEN,
+        max_length=constants.TERM_ID_MAX_LEN,
+    )
+    answer: str = Field(
+        min_length=constants.ANSWER_MIN_LEN,
+        max_length=constants.ANSWER_MAX_LEN,
+    )
+
+
+class RubricBreakdownResponse(BaseModel):
+    """The four-part learning rubric in a response.
+
+    Weights: expansion 30, concept 40, purpose 20, example 10 (total ≤100).
+    Each component is 0 if the student answer missed that dimension.
+    """
+
+    expansion: int = Field(ge=0, le=constants.EXPANSION_WEIGHT)
+    concept: int = Field(ge=0, le=constants.CONCEPT_WEIGHT)
+    purpose: int = Field(ge=0, le=constants.PURPOSE_WEIGHT)
+    example: int = Field(ge=0, le=constants.EXAMPLE_WEIGHT)
+    total: int = Field(ge=constants.MIN_SCORE, le=constants.MAX_SCORE)
+
+
+class SubmitAnswerResponse(BaseModel):
+    """The result of grading one answer.
+
+    verdict: one of correct, partial, incorrect.
+    matched_via: grading path (exact match, alias, fuzzy match, or LLM rubric).
+    confidence: 0.0–1.0, higher = more certain (exact=1.0, fuzzy~0.5, llm variable).
+    feedback: localized explanation for the student.
+    score: sum of rubric breakdown (0–100).
+    """
+
+    verdict: str = Field(
+        examples=["correct", "partial", "incorrect"],
+        description="Grading outcome",
+    )
+    score: int = Field(
+        ge=constants.MIN_SCORE,
+        le=constants.MAX_SCORE,
+        description="Total score from rubric breakdown",
+    )
+    matched_via: str = Field(
+        examples=["exact", "alias", "fuzzy", "llm_rubric"],
+        description="Which grader matched the answer",
+    )
+    confidence: float = Field(
+        ge=constants.MIN_CONFIDENCE,
+        le=constants.MAX_CONFIDENCE,
+        description="Certainty of the match (0.0–1.0)",
+    )
+    feedback: str = Field(description="Explanation for the student")
+    rubric: RubricBreakdownResponse
+
+    @staticmethod
+    def from_outcome(outcome: GradeOutcome) -> SubmitAnswerResponse:
+        """Convert a GradeOutcome to a response."""
+        return SubmitAnswerResponse(
+            verdict=outcome.verdict.value,
+            score=outcome.score,
+            matched_via=outcome.matched_via.value,
+            confidence=outcome.confidence,
+            feedback=outcome.feedback,
+            rubric=RubricBreakdownResponse(
+                expansion=outcome.rubric.expansion,
+                concept=outcome.rubric.concept,
+                purpose=outcome.rubric.purpose,
+                example=outcome.rubric.example,
+                total=outcome.rubric.total,
+            ),
+        )
+
+
+class ErrorResponse(BaseModel):
+    """Error response body.
+
+    error: human-readable message (generic, no info leaks).
+    status_code: HTTP status code (422 for validation, 404 for term not found, 500 for server errors).
+    """
+
+    error: str
+    status_code: int = Field(ge=400, le=599, description="HTTP status code (400–599)")

@@ -8,10 +8,11 @@ capped at the 30-point expansion slice.
 
 from __future__ import annotations
 
-from domain.graders import normalize
-from domain.graders import token_similarity
-from domain.outcome import RubricBreakdown
-from domain.term import Term
+from . import constants
+from .graders import normalize
+from .graders import token_similarity
+from .outcome import RubricBreakdown
+from .term import Term
 
 # Words carrying no domain signal. Overlap on these is noise, so they are
 # stripped before scoring content slices.
@@ -169,7 +170,7 @@ def score_expansion(answer: str, term: Term) -> int:
         token_similarity(answer, candidate)
         for candidate in term.all_acceptable_expansions()
     )
-    return round(RubricBreakdown.EXPANSION_WEIGHT * best)
+    return round(constants.EXPANSION_WEIGHT * best)
 
 
 def score_concept(answer: str, term: Term) -> int:
@@ -180,7 +181,7 @@ def score_concept(answer: str, term: Term) -> int:
 
     best = max(_overlap(words, d) for d in term.definitions)
     ratio = min(best / CONCEPT_FULL_OVERLAP, 1.0)
-    return round(RubricBreakdown.CONCEPT_WEIGHT * ratio)
+    return round(constants.CONCEPT_WEIGHT * ratio)
 
 
 def score_purpose(answer: str, term: Term) -> int:
@@ -199,7 +200,7 @@ def score_purpose(answer: str, term: Term) -> int:
     best = max(_overlap(words, d) for d in term.definitions)
     ratio = min(best / CONCEPT_FULL_OVERLAP, 1.0)
     # Half for signalling purpose at all, half for grounding it.
-    return round(RubricBreakdown.PURPOSE_WEIGHT * (0.5 + 0.5 * ratio))
+    return round(constants.PURPOSE_WEIGHT * (0.5 + 0.5 * ratio))
 
 
 def score_example(answer: str, term: Term) -> int:
@@ -209,13 +210,13 @@ def score_example(answer: str, term: Term) -> int:
         return 0
 
     if _contains_marker(answer, EXAMPLE_MARKERS):
-        return RubricBreakdown.EXAMPLE_WEIGHT
+        return constants.EXAMPLE_WEIGHT
 
     if (
         term.examples
         and max(_overlap(words, e) for e in term.examples) >= EXAMPLE_OVERLAP
     ):
-        return RubricBreakdown.EXAMPLE_WEIGHT
+        return constants.EXAMPLE_WEIGHT
 
     return 0
 

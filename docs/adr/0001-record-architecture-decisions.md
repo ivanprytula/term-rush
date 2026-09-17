@@ -35,12 +35,14 @@ stated reversal condition is an advertisement, not a decision record.
 ## Consequences
 
 **Good:**
+
 - The repo is self-explaining to a reviewer who has 15 minutes.
 - Future-me can re-enter the project without re-deriving context.
 - The negative ADRs ("why we did NOT use X in production") are the strongest signal
   in the repo, because they demonstrate restraint rather than enthusiasm.
 
 **Bad:**
+
 - Writing overhead on every meaningful change.
 - Risk of ADRs drifting from the code. Mitigated by keeping them short and linking
   them from the code they describe (see the docstring references in

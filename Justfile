@@ -28,6 +28,9 @@ arch:
 
 check: quality arch test
 
+shell:
+    cd services/game && uv run python
+
 # Prove the architecture contracts actually fail on a violation.
 # A rule that never fails is decorative.
 arch-verify:
@@ -54,6 +57,10 @@ build:
 # Run the game-service from the monolith image.
 run port="8000":
     docker run --rm -p {{port}}:8000 {{IMAGE}}:dev
+
+# Run API server with hot-reload (development).
+run-dev port="8000":
+    PYTHONPATH=services/game uv run uvicorn services.game.api.app:app --host 0.0.0.0 --port {{port}} --reload
 
 # Build, start, probe /health and /ready, tear down.
 smoke: build

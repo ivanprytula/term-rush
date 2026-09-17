@@ -46,7 +46,7 @@ The heterogeneity is the point. A pipeline over one clean source is not interest
 a pipeline that must reconcile three sources of differing trust is.
 
 | Source | Confidence | Yields | Failure mode |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Dependency manifests (`pyproject.toml`, `package.json`, `*.tf`) | **High** — structured, machine-parseable | `fastapi`, `sqlalchemy`, `pgvector` | Names a tool, not a concept |
 | ADR + doc headings | **Medium** — curated prose, human-written | `Idempotency`, `Backpressure`, `Outbox` | Heading text is not always a term |
 | Docstrings + class/Protocol names | **Medium** | `Grader`, `AnswerEvaluator`, `UnitOfWork` | Project-local jargon, not industry vocabulary |
@@ -58,7 +58,7 @@ candidate is auto-promoted, queued for review, or dropped.
 
 ### Pipeline stages
 
-```
+```text
  extract          enrich            validate         load           serve
  ────────         ──────            ────────         ────           ─────
  repo sources     LLM drafts        schema +         warehouse      game API
@@ -97,6 +97,7 @@ null-check.
 ## Consequences
 
 **Good:**
+
 - Terms are anchored to code you wrote. Learning actually sticks.
 - A legitimately interesting pipeline: multi-source, differing trust, LLM in the
   middle, quality gates, human review.
@@ -104,6 +105,7 @@ null-check.
 - Full lineage story: every term traces to a file and line.
 
 **Bad:**
+
 - Bootstrapping problem: early repo yields ~30 terms. Mitigated by seeding the
   prototype's 24 and letting the bank grow with the project — which is the point.
 - Repo-mined vocabulary skews to what this project uses. It will never teach you

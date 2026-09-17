@@ -8,10 +8,11 @@ breakdown is what turns this from a quiz into a learning tool.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import ClassVar
 
 from pydantic import BaseModel
 from pydantic import Field
+
+from . import constants
 
 
 class Verdict(StrEnum):
@@ -34,25 +35,25 @@ class MatchedVia(StrEnum):
 
 
 class RubricBreakdown(BaseModel):
-    """The four-part learning rubric.
+    """The four-part learning rubric (weights: 30-40-20-10).
 
-    Weights are fixed by the product design: knowing *what* a term expands to is
-    worth far less than knowing what it is for. A player who says "Unit of Work"
-    scores 30; one who explains it groups database changes into one transaction
-    scores 90.
+    Expansion: do you know what the letters stand for? (30 pts)
+    Concept: do you know what it is? (40 pts)
+    Purpose: do you know what it is for? (20 pts)
+    Example: can you ground it in something concrete? (10 pts)
+
+    Deterministic graders can only award Expansion. LLM judge in Phase 2 fills
+    the rest. A player saying "Unit of Work" scores 30; one explaining the
+    pattern scores 90. The inversion is the product thesis.
+    Weights are sourced from constants.py so changes propagate everywhere.
     """
 
     model_config = {"frozen": True}
 
-    EXPANSION_WEIGHT: ClassVar[int] = 30
-    CONCEPT_WEIGHT: ClassVar[int] = 40
-    PURPOSE_WEIGHT: ClassVar[int] = 20
-    EXAMPLE_WEIGHT: ClassVar[int] = 10
-
-    expansion: int = Field(ge=0, le=EXPANSION_WEIGHT)
-    concept: int = Field(ge=0, le=CONCEPT_WEIGHT)
-    purpose: int = Field(ge=0, le=PURPOSE_WEIGHT)
-    example: int = Field(ge=0, le=EXAMPLE_WEIGHT)
+    expansion: int = Field(ge=0, le=constants.EXPANSION_WEIGHT)
+    concept: int = Field(ge=0, le=constants.CONCEPT_WEIGHT)
+    purpose: int = Field(ge=0, le=constants.PURPOSE_WEIGHT)
+    example: int = Field(ge=0, le=constants.EXAMPLE_WEIGHT)
 
     @property
     def total(self) -> int:
@@ -64,7 +65,9 @@ class RubricBreakdown(BaseModel):
         but it cannot judge whether the player understood the concept. Phase 1
         graders use this; the Phase 2 LLM judge fills in the rest.
         """
-        return cls(expansion=cls.EXPANSION_WEIGHT, concept=0, purpose=0, example=0)
+        return cls(
+            expansion=constants.EXPANSION_WEIGHT, concept=0, purpose=0, example=0
+        )
 
     @classmethod
     def zero(cls) -> RubricBreakdown:

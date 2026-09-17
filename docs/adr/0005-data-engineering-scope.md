@@ -27,20 +27,20 @@ Streaming is deliberately deferred, with a stated trigger.**
 
 ### Stack, and why each
 
-| Concern | Choice | Reasoning |
-|---|---|---|
-| Orchestration | **Dagster** | Asset-oriented rather than task-oriented: you declare *the term bank* as an asset with dependencies, and lineage comes free. Better fit than Airflow for a data-product-shaped graph, and materially nicer locally. Airflow noted as the incumbent alternative. |
-| Transformation | **dbt Core** | SQL-first, version-controlled, testable. `dbt test` is the quality gate. The industry default for good reason. |
-| Warehouse (local) | **DuckDB** | Zero-ops, fast, runs in CI. The whole warehouse is a file. |
-| Warehouse (cloud) | **BigQuery** | GCP-native, generous free tier, same dbt models with a different profile — which is the portability demonstration. |
-| Quality | **dbt tests + Pydantic contracts** | Two layers: schema/type at ingest (Pydantic), relational/distributional in the warehouse (dbt). |
-| Lineage | **Dagster asset graph + dbt DAG** | Column-level where dbt provides it; asset-level across the whole pipeline. |
+| Concern           | Choice                             | Reasoning                                                                                                                                                                                                                                                       |
+| ----------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Orchestration     | **Dagster**                        | Asset-oriented rather than task-oriented: you declare *the term bank* as an asset with dependencies, and lineage comes free. Better fit than Airflow for a data-product-shaped graph, and materially nicer locally. Airflow noted as the incumbent alternative. |
+| Transformation    | **dbt Core**                       | SQL-first, version-controlled, testable. `dbt test` is the quality gate. The industry default for good reason.                                                                                                                                                  |
+| Warehouse (local) | **DuckDB**                         | Zero-ops, fast, runs in CI. The whole warehouse is a file.                                                                                                                                                                                                      |
+| Warehouse (cloud) | **BigQuery**                       | GCP-native, generous free tier, same dbt models with a different profile — which is the portability demonstration.                                                                                                                                              |
+| Quality           | **dbt tests + Pydantic contracts** | Two layers: schema/type at ingest (Pydantic), relational/distributional in the warehouse (dbt).                                                                                                                                                                 |
+| Lineage           | **Dagster asset graph + dbt DAG**  | Column-level where dbt provides it; asset-level across the whole pipeline.                                                                                                                                                                                      |
 
 ### Dimensional model
 
 A star schema, because the queries are analytical and the grain is obvious:
 
-```
+```text
               dim_term ──┐
                          │
               dim_user ──┼──▶ fct_answer        (grain: one graded answer)
@@ -105,6 +105,7 @@ dedicated vector DB).
 ## Consequences
 
 **Good:**
+
 - Covers the large majority of what data-engineering interviews probe: modeling,
   orchestration, quality, lineage, idempotency, SCD, backfill.
 - Runs free locally (DuckDB) and free-tier in cloud (BigQuery).
@@ -112,6 +113,7 @@ dedicated vector DB).
 - Closed loop: game → events → warehouse → difficulty calibration → game.
 
 **Bad:**
+
 - Dagster + dbt is a real learning curve on top of an already large project.
 - A star schema over a few thousand rows is over-modeled for the data volume. Accepted
   deliberately — the schema must be *right* to be worth demonstrating, and synthetic

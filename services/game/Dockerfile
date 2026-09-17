@@ -3,7 +3,7 @@
 # aren't namespaced yet. Splitting into per-service images stays a one-file
 # change once a second service exists.
 
-FROM python:3.14 AS builder
+FROM python:3.14-slim-trixie AS builder
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -43,7 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 RUN groupadd --system app && useradd --system --gid app --no-create-home app
 
 ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONPATH="/app:$PYTHONPATH" \
+    PYTHONPATH="/app/services/game" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 

@@ -20,7 +20,7 @@ all members — the property a per-service split would immediately break.
 
 **One image containing every workspace member. `CMD` selects which one runs.**
 
-```
+```bash
 docker run term-rush                                     # game-service (default)
 docker run term-rush uvicorn content_service.api.app:app # another member
 docker run term-rush celery -A game_service.worker worker

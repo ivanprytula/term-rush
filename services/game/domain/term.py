@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
 
+from domain import constants
+
 
 class Difficulty(IntEnum):
     """How hard a term is to explain, not to recognize.
@@ -34,7 +36,9 @@ class Category(BaseModel):
 
     model_config = {"frozen": True}
 
-    slug: str = Field(pattern=r"^[a-z][a-z0-9-]*$", max_length=32)
+    slug: str = Field(
+        pattern=r"^[a-z][a-z0-9-]*$", max_length=constants.TERM_SLUG_MAX_LEN
+    )
 
     def __str__(self) -> str:
         return self.slug
@@ -49,9 +53,16 @@ class Term(BaseModel):
 
     model_config = {"frozen": True}
 
-    id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$", max_length=64)
-    term: str = Field(min_length=1, max_length=64)
-    expansion: str = Field(min_length=1, max_length=256)
+    id: str = Field(
+        pattern=r"^[a-z0-9][a-z0-9-]*$", max_length=constants.TERM_ID_MAX_LEN
+    )
+    term: str = Field(
+        min_length=constants.TERM_ID_MIN_LEN, max_length=constants.TERM_ID_MAX_LEN
+    )
+    expansion: str = Field(
+        min_length=constants.TERM_ID_MIN_LEN,
+        max_length=constants.TERM_DEFINITION_MAX_LEN,
+    )
 
     definitions: tuple[str, ...] = Field(min_length=1)
     aliases: tuple[str, ...] = ()
@@ -82,7 +93,8 @@ class Term(BaseModel):
         return (
             self.difficulty >= Difficulty.MODERATE
             and bool(self.examples)
-            and len(self.primary_definition) >= 40
+            and len(self.primary_definition)
+            >= constants.TERM_PRIMARY_DEFINITION_MIN_LEN
         )
 
     def all_acceptable_expansions(self) -> tuple[str, ...]:

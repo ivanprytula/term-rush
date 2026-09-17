@@ -7,6 +7,28 @@ from datetime import UTC
 from datetime import datetime
 from typing import Any
 
+from opentelemetry import trace
+from opentelemetry.baggage import get_all
+
+
+class OTelFilter(logging.Filter):
+    """Inject OpenTelemetry trace context and baggage into log records."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Attach trace/span IDs and baggage to the record."""
+        span = trace.get_current_span()
+        ctx = span.get_span_context()
+
+        if ctx.trace_id:
+            record.trace_id = f"0x{ctx.trace_id:032x}"
+        if ctx.span_id:
+            record.span_id = f"0x{ctx.span_id:016x}"
+
+        for key, value in get_all().items():
+            setattr(record, key, value)
+
+        return True
+
 
 class StructuredFormatter(logging.Formatter):
     """JSON formatter for structured logs compatible with OTel and log aggregators."""
@@ -80,6 +102,7 @@ class StructuredFormatter(logging.Formatter):
         "stack_info",
         "trace_id",
         "span_id",
+        "taskName",
     }
 
 
@@ -90,6 +113,7 @@ def configure_logging(level: str = "INFO") -> None:
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(StructuredFormatter())
+    handler.addFilter(OTelFilter())
     root_logger.addHandler(handler)
 
     logging.getLogger("uvicorn.access").handlers.clear()

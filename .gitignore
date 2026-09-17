@@ -33,3 +33,9 @@ dist/
 # Local tooling
 .remember/
 .DS_Store
+.local-dev/
+
+.claude/
+.agents/
+
+.vscode/

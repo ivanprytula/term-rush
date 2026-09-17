@@ -36,6 +36,7 @@ dev = [
     "import-linter[ui]>=2.1",
     "prek>=0.5.3",
     "ty>=0.0.81",
+    "mdlint>=0.3.0",
 ]
 
 [tool.ruff]

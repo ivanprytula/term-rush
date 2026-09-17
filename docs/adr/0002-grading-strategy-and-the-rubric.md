@@ -13,7 +13,7 @@ That is fine for `CPU = Central Processing Unit`. It is actively wrong for the t
 that matter. Consider `UoW`:
 
 | Answer | Prototype verdict | What the player actually knows |
-|---|---|---|
+| --- | --- | --- |
 | "Unit of Work" | ✅ pass | the expansion, nothing more |
 | "Unit" | ✅ pass (0.88, substring!) | almost nothing |
 | "groups database changes into one transaction" | ❌ fail (0.0) | **the actual concept** |
@@ -32,7 +32,7 @@ Two decisions, staged.
 `None` means "I have no opinion, ask the next grader" — distinct from returning a
 zero score, which would end the chain. Ordered cheapest-and-most-certain first:
 
-```
+```text
 ExactGrader → AliasGrader → FuzzyGrader → [LLMRubricGrader, Phase 2]
 ```
 
@@ -47,7 +47,7 @@ to a tuple. Zero changes to `AnswerEvaluator`, to the use cases, or to the API.
 ### 2. A four-part rubric, weighted against memorization (Phase 2)
 
 | Slice | Weight | Question it answers |
-|---|---|---|
+| --- | --- | --- |
 | Expansion | 30 | Do you know what the letters stand for? |
 | Concept | 40 | Do you know what it *is*? |
 | Purpose | 20 | Do you know what it is *for*? |
