@@ -1,0 +1,35 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Tool caches — redirected to the root .cache/ via pyproject settings
+.cache/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.import_linter_cache/
+coverage/
+.coverage
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Env & secrets — never commit real values, only .example files
+.env
+.env.*
+!.env.example
+*.tfvars
+!*.tfvars.example
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# Local tooling
+.remember/
+.DS_Store

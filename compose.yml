@@ -1,0 +1,7 @@
+services:
+  game:
+    build:
+      context: .
+      dockerfile: services/game/Dockerfile
+    ports:
+      - "8000:8000"

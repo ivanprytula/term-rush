@@ -1,0 +1,66 @@
+[project]
+name = "term-rush"
+version = "0.1.0"
+description = "Term Rush workspace root."
+requires-python = ">=3.14"
+license = "Apache-2.0"
+authors = [{ name = "Ivan Prytula" }]
+keywords = [
+  "term-rush",
+  "game",
+  "async",
+  "fastapi",
+  "sqlalchemy",
+  "redis",
+  "alembic",
+  "pytest",
+  "hypothesis",
+  "ruff",
+  "import-linter",
+]
+
+[tool.uv.workspace]
+members = ["services/*"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "hypothesis>=6.112",
+    "httpx>=0.27",
+    "ruff>=0.7",
+    "import-linter[ui]>=2.1",
+    "prek>=0.5.3",
+    "ty>=0.0.81",
+]
+
+[tool.ruff]
+line-length = 88
+cache-dir = ".cache/ruff"
+fix = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.isort]
+force-single-line = true
+split-on-trailing-comma = false
+
+[tool.pytest.ini_options]
+testpaths = ["services"]
+asyncio_mode = "auto"
+cache_dir = ".cache/pytest"
+addopts = "--cov=services/game --cov-report=term-missing --cov-report=html:coverage"
+
+[tool.coverage.run]
+omit = ["*/tests/*"]
+
+[tool.typos.files]
+extend-exclude = ["uv.lock"]
+
+[tool.typos.default.extend-identifiers]
+alls = "alls"
