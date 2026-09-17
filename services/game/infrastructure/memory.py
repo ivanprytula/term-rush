@@ -1,0 +1,83 @@
+"""In-memory adapters for local testing and stateless deployments."""
+
+from __future__ import annotations
+
+import asyncio
+from typing import Any
+
+from application.ports import EventPublisher
+from application.ports import GradeCache
+from application.ports import TermRepository
+from application.ports import UnitOfWork
+from domain.outcome import GradeOutcome
+from domain.term import Term
+
+
+class InMemoryTermRepository(TermRepository):
+    """Store terms in a dict."""
+
+    def __init__(self, terms: dict[str, Term] | None = None) -> None:
+        self.terms = terms or {}
+
+    async def by_id(self, term_id: str) -> Term | None:
+        return self.terms.get(term_id)
+
+
+class InMemoryGradeCache(GradeCache):
+    """Cache grading outcomes in a nested dict: term_id -> answer_hash -> outcome."""
+
+    def __init__(self) -> None:
+        self.cache: dict[str, dict[str, GradeOutcome]] = {}
+
+    async def get(self, term_id: str, answer_hash: str) -> GradeOutcome | None:
+        return self.cache.get(term_id, {}).get(answer_hash)
+
+    async def put(self, term_id: str, answer_hash: str, outcome: GradeOutcome) -> None:
+        if term_id not in self.cache:
+            self.cache[term_id] = {}
+        self.cache[term_id][answer_hash] = outcome
+
+
+class InMemoryEventPublisher(EventPublisher):
+    """Collect events in memory for testing."""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, Any]]] = []
+
+    async def publish(self, event_type: str, payload: dict) -> None:
+        self.events.append((event_type, payload))
+
+
+class InMemoryUnitOfWork(UnitOfWork):
+    """Simple async context manager backed by in-memory adapters.
+
+    ponytail: global lock for now; per-account locks if throughput matters.
+    """
+
+    _lock = asyncio.Lock()
+
+    def __init__(
+        self,
+        terms: dict[str, Term] | None = None,
+    ) -> None:
+        self.terms = InMemoryTermRepository(terms)
+        self.grade_cache = InMemoryGradeCache()
+        self.events = InMemoryEventPublisher()
+        self._in_transaction = False
+
+    async def __aenter__(self) -> InMemoryUnitOfWork:
+        await self._lock.acquire()
+        self._in_transaction = True
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        try:
+            if exc_type is None:
+                await self.commit()
+        finally:
+            self._in_transaction = False
+            self._lock.release()
+
+    async def commit(self) -> None:
+        if not self._in_transaction:
+            raise RuntimeError("Cannot commit outside a transaction")

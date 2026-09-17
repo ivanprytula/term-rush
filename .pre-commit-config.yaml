@@ -28,14 +28,14 @@ repos:
     hooks:
       - id: local-ruff-check
         name: ruff check
-        entry: uv run ruff check --force-exclude --exit-non-zero-on-format
+        entry: uv run ruff check --force-exclude --exit-non-zero-on-fix
         require_serial: true
         language: unsupported
         types: [python]
 
       - id: local-ruff-format
         name: ruff format
-        entry: uv run ruff format --force-exclude --exit-non-zero-on-format
+        entry: uv run ruff format --force-exclude --exit-non-zero-on-fix
         require_serial: true
         language: unsupported
         types: [python]
