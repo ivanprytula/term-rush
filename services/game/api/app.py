@@ -1,5 +1,6 @@
 import logging
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi import Request
@@ -8,13 +9,33 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from opentelemetry.baggage import set_baggage
 
+from api.dependencies import _engine
+from api.dependencies import _init_session_factory
 from api.routers import answers
 from infrastructure.logging import configure_logging
 
 configure_logging()
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Term Rush — game service")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Initialize database on startup, clean up on shutdown."""
+    try:
+        await _init_session_factory()
+        logger.info("Database initialized")
+    except Exception as e:
+        logger.critical(f"Failed to initialize database: {e}")
+        raise
+    try:
+        yield
+    finally:
+        if _engine is not None:
+            await _engine.dispose()
+            logger.info("Database engine disposed")
+
+
+app = FastAPI(title="Term Rush — game service", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -36,7 +57,7 @@ def health() -> dict[str, str]:
 
 @app.get("/ready")
 def ready() -> dict[str, str]:
-    """Readiness: safe to route traffic. Will check deps once they exist."""
+    """Readiness: safe to route traffic."""
     return {"status": "ready"}
 
 

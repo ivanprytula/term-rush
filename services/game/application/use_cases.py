@@ -60,7 +60,5 @@ class SubmitAnswer:
                 },
             )
 
-            # Commit
-            await self.uow.commit()
-
+            # Commit happens in uow.__aexit__ on clean exit
             return outcome

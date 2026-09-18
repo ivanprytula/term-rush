@@ -51,10 +51,8 @@ class InMemoryEventPublisher(EventPublisher):
 class InMemoryUnitOfWork(UnitOfWork):
     """Simple async context manager backed by in-memory adapters.
 
-    ponytail: global lock for now; per-account locks if throughput matters.
+    Uses asyncio.Lock for concurrent request isolation (Phase 1d in-memory cache).
     """
-
-    _lock = asyncio.Lock()
 
     def __init__(
         self,
@@ -64,13 +62,17 @@ class InMemoryUnitOfWork(UnitOfWork):
         self.grade_cache = InMemoryGradeCache()
         self.events = InMemoryEventPublisher()
         self._in_transaction = False
+        self._lock: asyncio.Lock | None = None
 
     async def __aenter__(self) -> InMemoryUnitOfWork:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         await self._lock.acquire()
         self._in_transaction = True
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        assert self._lock is not None  # set by __aenter__, which always runs first
         try:
             if exc_type is None:
                 await self.commit()

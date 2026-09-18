@@ -2,14 +2,34 @@
 
 from __future__ import annotations
 
-from application.use_cases import SubmitAnswer
+from collections.abc import AsyncGenerator
+from typing import Any
+
+from api.config import settings
+from application.ports import UnitOfWork
+from infrastructure.database import create_db_engine
 from infrastructure.memory import InMemoryUnitOfWork
+from infrastructure.sql_uow import SQLUnitOfWork
+
+# Session factory and engine (created at app startup via lifespan)
+_session_factory: Any = None
+_engine: Any = None
 
 
-def get_submit_answer_use_case() -> SubmitAnswer:
-    """Provide the SubmitAnswer use case.
+async def _init_session_factory() -> None:
+    """Initialize the session factory and engine (called from lifespan)."""
+    global _session_factory, _engine
+    _engine, _session_factory = await create_db_engine(str(settings.DATABASE_URL))
 
-    Phase 1: in-memory UoW. Phase 1d: inject from a container.
+
+async def get_unit_of_work() -> AsyncGenerator[UnitOfWork]:
+    """Provide a Unit of Work for the request (in-memory for tests, SQL for production).
+
+    Manages session lifecycle: creates on entry, closes on exit.
     """
-    uow = InMemoryUnitOfWork()
-    return SubmitAnswer(uow)
+    if _session_factory is None:
+        uow = InMemoryUnitOfWork()
+        yield uow
+    else:
+        async with _session_factory() as session:
+            yield SQLUnitOfWork(session)
