@@ -47,12 +47,15 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-WORKDIR /app/services/game
-
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --from=builder --chown=app:app /app/services /app/services
+COPY --chown=app:app alembic.ini /app/
+COPY --chown=app:app services/game/alembic/ /app/alembic/
+
+WORKDIR /app/services/game
 
 USER app
 EXPOSE 8000
 
-CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+# 12-factor app: same binary everywhere. PROCESS_TYPE env var determines behavior.
+CMD ["python", "bin/run.py"]

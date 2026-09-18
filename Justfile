@@ -3,16 +3,11 @@ set shell := ["bash", "-uc"]
 default:
     @just --list
 
+# === Setup & Code Quality ===
+
 # Install the workspace (creates .venv at the root)
 sync:
     uv sync --all-packages
-
-test *ARGS:
-    uv run pytest {{ARGS}}
-
-coverage:
-    uv run pytest --cov-report=term-missing:skip-covered
-    @echo "HTML report: coverage/index.html"
 
 quality:
     uv run ruff check .
@@ -26,13 +21,7 @@ precommit:
 arch:
     cd services/game && uv run lint-imports
 
-check: quality arch test
-
-shell:
-    cd services/game && uv run python
-
 # Prove the architecture contracts actually fail on a violation.
-# A rule that never fails is decorative.
 arch-verify:
     #!/usr/bin/env bash
     set -uo pipefail
@@ -49,24 +38,72 @@ arch-verify:
     fi
     echo "OK: architecture contracts reject a domain->framework import"
 
-IMAGE := "term-rush"
+check: quality arch test
 
-build:
-    docker build -f services/game/Dockerfile -t {{IMAGE}}:dev .
+# === Tests ===
 
-# Run the game-service from the monolith image.
-run port="8000":
-    docker run --rm -p {{port}}:8000 {{IMAGE}}:dev
+test *ARGS:
+    uv run pytest {{ARGS}}
 
-# Run API server with hot-reload (development).
+coverage:
+    uv run pytest --cov-report=term-missing:skip-covered
+    @echo "HTML report: coverage/index.html"
+
+# === Utilities ===
+
+shell:
+    cd services/game && uv run python
+
+clean:
+    find . -name '__pycache__' -type d -not -path './.venv/*' -exec rm -rf {} + 2>/dev/null || true
+    rm -rf .cache coverage .coverage
+
+# === Running Services & Containers ===
+
+# Start postgres and redis for local development.
+up:
+    docker compose up -d postgres redis
+    @echo "postgres: localhost:5432"
+    @echo "redis: localhost:6379"
+
+# Stop postgres and redis.
+down:
+    docker compose down
+
+# Run database migrations.
+migrate:
+    #!/usr/bin/env bash
+    export PYTHONPATH=services/game
+    export PROCESS_TYPE=migrate
+    export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/term_rush
+    uv run python services/game/bin/run.py
+
+# Seed the terms table with sample data (requires postgres + migrations run first).
+seed:
+    #!/usr/bin/env bash
+    export PYTHONPATH=services/game
+    export PROCESS_TYPE=seed
+    export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/term_rush
+    uv run python services/game/bin/run.py
+
+# Run API server with hot-reload (requires postgres + migrations run first).
 run-dev port="8000":
-    PYTHONPATH=services/game uv run uvicorn services.game.api.app:app --host 0.0.0.0 --port {{port}} --reload
+    #!/usr/bin/env bash
+    export PYTHONPATH=services/game
+    export PROCESS_TYPE=api
+    export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/term_rush
+    export REDIS_URL=redis://localhost:6379/0
+    export ENVIRONMENT=development
+    uv run python services/game/bin/run.py
 
-# Build, start, probe /health and /ready, tear down.
-smoke: build
+# === Smoke Tests ===
+
+smoke:
     #!/usr/bin/env bash
     set -euo pipefail
-    cid=$(docker run -d -p 8000:8000 {{IMAGE}}:dev)
+    IMAGE="term-rush:smoke"
+    docker build -f services/game/Dockerfile -t "$IMAGE" .
+    cid=$(docker run -d -p 8000:8000 "$IMAGE")
     trap 'docker rm -f "$cid" > /dev/null' EXIT
     for _ in $(seq 30); do
         curl -sf localhost:8000/health > /dev/null && break
@@ -75,7 +112,3 @@ smoke: build
     curl -sf localhost:8000/health | tee /dev/stderr | grep -q '"ok"'
     curl -sf localhost:8000/ready  | tee /dev/stderr | grep -q '"ready"'
     echo "OK: image serves /health and /ready"
-
-clean:
-    find . -name '__pycache__' -type d -not -path './.venv/*' -exec rm -rf {} + 2>/dev/null || true
-    rm -rf .cache coverage .coverage

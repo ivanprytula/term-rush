@@ -1,14 +1,10 @@
 services:
   game:
-    command: ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: ["python", "bin/run.py"]
     volumes:
       - ./services:/app/services
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 15s
+      - ./alembic.ini:/app/alembic.ini
+      - ./alembic:/app/alembic
 
   postgres:
     volumes:
