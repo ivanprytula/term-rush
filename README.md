@@ -7,7 +7,7 @@ vehicle, not the deliverable. Scope and infrastructure choices are sized for tha
 (see [ADR-0001](./docs/adr/0001-record-architecture-decisions.md)), not for a
 minimal shipping product.
 
-**Status:** Phase 1b complete (domain + application layer). Phase 1c (FastAPI) in progress.
+**Status:** Phase 1c complete (API layer). Phase 1d (PostgreSQL foundation) in progress.
 
 ## Backend (Phase 1)
 
@@ -53,11 +53,11 @@ See [docs/skills-map.md](./docs/skills-map.md) for capability coverage (what's d
 
 ## Next Steps
 
-- **Phase 1c:** FastAPI wiring, request/response models, answer submission endpoint
-  — done when a client can submit an answer over HTTP and get a real grade back.
-- **Phase 1d:** PostgreSQL + Redis, Alembic migrations
-  — done when sessions and answers survive a restart instead of living in memory.
-- **Phase 1e:** React client, delete `index.html`
+- **Phase 1d:** PostgreSQL adapter for terms, run migrations, seed test data
+  — done when terms load from the database and `POST /answers/submit` works end-to-end.
+- **Phase 1e:** Session persistence (SQLAlchemy Session entity, Alembic)
+  — done when session state survives a container restart.
+- **Phase 1f:** React client, delete `index.html`
   — done when the prototype UI is fully replaced and removed.
 - **Phase 2:** LLM-based grading (Celery + Claude), streaming rubric feedback
   — done when grading quality exceeds the deterministic rubric and feedback streams live.

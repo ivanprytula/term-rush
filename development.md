@@ -8,7 +8,6 @@ Install dependencies and run checks:
 just sync         # Install the workspace
 uv run prek install  # One-time: install the pre-commit git hook
 just check        # Lint, type-check, verify architecture, run tests
-just coverage     # Run tests with coverage report
 ```
 
 Without `prek install`, checks only run when you invoke `just check`/`just precommit`
@@ -52,22 +51,74 @@ just check         # quality + arch + test (full gate)
 - **Type checking:** `ty`
 - **Architecture:** `import-linter` (layering, domain isolation, service isolation contracts)
 
-## Docker
+## Running Services
+
+Start supporting services for local development:
 
 ```bash
-just build         # Build the monolith image
-just run           # Run the API locally (port 8000)
-just smoke         # Build, start, probe /health and /ready, tear down
+just up   # Start postgres and redis
+just down # Stop postgres and redis
+just migrate       # Run database migrations (requires postgres running)
+just run-dev       # Run API server with hot-reload (requires postgres + migrations)
+just smoke         # Full integration test: build image, start, probe /health and /ready
 ```
 
-The monolith image contains all workspace members. Service selection happens at runtime via `CMD` override.
+The monolith image contains all workspace members. Service selection happens at runtime via `PROCESS_TYPE` env var (12-factor):
+
+- `PROCESS_TYPE=migrate` — Run Alembic migrations synchronously
+- `PROCESS_TYPE=api` — Run FastAPI server asynchronously
 
 See [ADR-0006](./docs/adr/0006-one-image-for-all-services.md) for the image strategy.
+
+### Database Migrations
+
+Same binary runs everywhere; behavior determined by `PROCESS_TYPE` env var:
+
+```bash
+# Local: start postgres first
+just up
+
+# Local: run migrations
+just migrate
+
+# Local: run API (assumes migrations complete)
+just run-dev
+
+# Docker Compose sidecar (before starting game service)
+docker compose --profile tools run migrate
+
+# Kubernetes Job (separate from Deployment)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+spec:
+  template:
+    spec:
+      containers:
+      - name: migrate
+        image: term-rush:latest
+        env:
+        - name: PROCESS_TYPE
+          value: migrate
+```
+
+Migrations and API are separate processes; API assumes schema is ready.
 
 `docker compose up` reads `compose.yml` and `compose.override.yml` together —
 Compose merges the override automatically, no flag needed. `compose.yml` defines the
 base build/ports; `compose.override.yml` adds local-dev extras (hot reload via
 `--reload` and bind mounts, healthcheck, `docker compose watch` sync/rebuild rules).
+
+## Secrets Generation
+
+Generate secure random values for environment variables with:
+
+```bash
+uv run python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Use this for `SECRET_KEY`, `FIRST_SUPERUSER_PASSWORD`, and other sensitive defaults. Store generated values in `.env` (gitignored), never in code or `compose.yml`.
 
 ## Documentation
 
@@ -82,6 +133,8 @@ Every decision that shapes the codebase should have an ADR, including deliberate
 
 **Phase 1b (Application)** — ✅ Complete. Ports, in-memory adapters, use cases, 4 new tests.
 
-**Phase 1c (API)** — In progress. FastAPI wiring, request/response models, `POST /answers/submit`.
+**Phase 1c (API)** — ✅ Complete. FastAPI wiring, Pydantic schemas, `/answers/submit` endpoint, 7 integration tests.
+
+**Phase 1d (PostgreSQL)** — In progress. Alembic migrations, TermModel, SQLTermRepository, SQLUnitOfWork scaffold.
 
 See [Next Steps](./README.md#next-steps) in the README for the full roadmap.
