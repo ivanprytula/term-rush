@@ -187,8 +187,8 @@ class TestAnswerEvaluator:
 class TestRubricBreakdown:
     def test_weights_sum_to_one_hundred(self) -> None:
         assert (
-            constants.EXPANSION_WEIGHT
-            + constants.CONCEPT_WEIGHT
+            constants.CONCEPT_WEIGHT
+            + constants.EXPANSION_WEIGHT
             + constants.PURPOSE_WEIGHT
             + constants.EXAMPLE_WEIGHT
         ) == 100
@@ -199,7 +199,7 @@ class TestRubricBreakdown:
         Reciting the expansion scores 30. Explaining what it is for scores 90.
         """
         memorized = RubricBreakdown.expansion_only()
-        understood = RubricBreakdown(expansion=30, concept=40, purpose=20, example=0)
+        understood = RubricBreakdown(concept=40, expansion=30, purpose=20, example=0)
         assert memorized.total == 30
         assert understood.total == 90
         assert understood.total > memorized.total

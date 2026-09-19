@@ -21,9 +21,9 @@ TERM_PRIMARY_DEFINITION_MIN_LEN = 40  # Boss-eligible terms require ≥40 chars
 ANSWER_MIN_LEN = 1
 ANSWER_MAX_LEN = 512
 
-# Rubric weights (sum = 100)
-EXPANSION_WEIGHT = 30
+# Rubric weights (sum = 100), heaviest first
 CONCEPT_WEIGHT = 40
+EXPANSION_WEIGHT = 30
 PURPOSE_WEIGHT = 20
 EXAMPLE_WEIGHT = 10
 

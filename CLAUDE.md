@@ -164,6 +164,14 @@ libs/core/
     events.py       # Domain event envelope (cross-service)
   pyproject.toml    # Shared library config
 
+services/web/
+  src/
+    client/         # Generated OpenAPI client (gitignored, see README)
+    App.tsx         # Flashcard screen: fetch term, submit, show result
+  vite.config.ts    # SWC + Tailwind v4 plugins, dev proxy to localhost:8000
+  openapi-ts.config.ts  # Client generation config
+  package.json      # npm; excluded from the uv workspace glob
+
 docs/
   adr/              # Architectural Decision Records
   skills-map.md     # Capability coverage (Covered/Partial/Planned/Deferred/Skipped)
@@ -172,7 +180,7 @@ docs/
 Root:
   pyproject.toml    # Workspace config, tool settings (ruff, ty, pytest, coverage)
   Justfile          # Task automation (sync, test, quality, arch, check, build, run, smoke, clean, coverage)
-  compose.yml       # Local dev stack (planned: postgres, redis, api, web)
+  compose.yml       # Local dev stack (postgres, redis, game API)
   .pre-commit-config.yaml  # Pre-commit hooks (prek)
 ```
 

@@ -43,12 +43,12 @@ class SubmitAnswerRequest(BaseModel):
 class RubricBreakdownResponse(BaseModel):
     """The four-part learning rubric in a response.
 
-    Weights: expansion 30, concept 40, purpose 20, example 10 (total ≤100).
+    Weights: concept 40, expansion 30, purpose 20, example 10 (total ≤100).
     Each component is 0 if the student answer missed that dimension.
     """
 
-    expansion: int = Field(ge=0, le=constants.EXPANSION_WEIGHT)
     concept: int = Field(ge=0, le=constants.CONCEPT_WEIGHT)
+    expansion: int = Field(ge=0, le=constants.EXPANSION_WEIGHT)
     purpose: int = Field(ge=0, le=constants.PURPOSE_WEIGHT)
     example: int = Field(ge=0, le=constants.EXAMPLE_WEIGHT)
     total: int = Field(ge=constants.MIN_SCORE, le=constants.MAX_SCORE)
@@ -95,8 +95,8 @@ class SubmitAnswerResponse(BaseModel):
             confidence=outcome.confidence,
             feedback=outcome.feedback,
             rubric=RubricBreakdownResponse(
-                expansion=outcome.rubric.expansion,
                 concept=outcome.rubric.concept,
+                expansion=outcome.rubric.expansion,
                 purpose=outcome.rubric.purpose,
                 example=outcome.rubric.example,
                 total=outcome.rubric.total,

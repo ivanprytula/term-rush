@@ -135,6 +135,17 @@ Every decision that shapes the codebase should have an ADR, including deliberate
 
 **Phase 1c (API)** — ✅ Complete. FastAPI wiring, Pydantic schemas, `/answers/submit` endpoint, 7 integration tests.
 
-**Phase 1d (PostgreSQL)** — In progress. Alembic migrations, TermModel, SQLTermRepository, SQLUnitOfWork scaffold.
+**Phase 1d (PostgreSQL)** — ✅ Complete. Alembic migrations, TermModel,
+SQLTermRepository, SQLUnitOfWork, seed script; verified end-to-end against
+a live container.
+
+**Phase 1e (Sessions)** — ✅ Complete. Session/SubmittedAnswer domain
+entities, SessionRepository port + adapters, `GET /sessions/{id}`;
+verified state survives a container restart.
+
+**Phase 1f (React client)** — ✅ Complete (minimal scope). `services/web/`
+covers the core submit/grade loop against the real API. Prototype parity
+(falling terms, voice input, settings) not yet scheduled — see
+[Next Steps](./README.md#next-steps).
 
 See [Next Steps](./README.md#next-steps) in the README for the full roadmap.

@@ -223,8 +223,8 @@ def score_example(answer: str, term: Term) -> int:
 
 def score(answer: str, term: Term) -> RubricBreakdown:
     return RubricBreakdown(
-        expansion=score_expansion(answer, term),
         concept=score_concept(answer, term),
+        expansion=score_expansion(answer, term),
         purpose=score_purpose(answer, term),
         example=score_example(answer, term),
     )

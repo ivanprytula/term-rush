@@ -7,25 +7,36 @@ vehicle, not the deliverable. Scope and infrastructure choices are sized for tha
 (see [ADR-0001](./docs/adr/0001-record-architecture-decisions.md)), not for a
 minimal shipping product.
 
-**Status:** Phase 1c complete (API layer). Phase 1d (PostgreSQL foundation) in progress.
+**Status:** Phase 1a–1f complete. Phase 2 (LLM-based grading) not yet started.
 
 ## Backend (Phase 1)
 
-- **Domain:** Term entities, grader chain (exact → alias → fuzzy), four-slice rubric scoring (30% expansion, 40% concept, 20% purpose, 10% example).
-- **Application:** Use cases, typed results, Ports (Protocols) for repository/cache/events.
-- **Infrastructure:** In-memory adapters for stateless deployments; SQL/Redis adapters planned Phase 1d.
-- **API:** FastAPI (planned Phase 1c).
-- **Architecture:** Clean Architecture with machine-enforced layering via `import-linter`.
-- **Testing:** 39+ tests with property-based testing (Hypothesis) and regression oracles pinned against the prototype.
+- **Domain:** Term entities, grader chain (exact → alias → fuzzy),
+  four-slice rubric scoring (30% expansion, 40% concept, 20% purpose, 10%
+  example). Session entity records a play-through's answer history.
+- **Application:** Use cases, typed results, Ports (Protocols) for
+  repository/cache/events.
+- **Infrastructure:** In-memory adapters for stateless deployments; SQL
+  adapters (SQLAlchemy + Alembic) for terms and sessions in PostgreSQL.
+- **API:** FastAPI — `POST /sessions/{id}/answers/submit`, `GET
+  /sessions/{id}`, `GET /terms/random`.
+- **Architecture:** Clean Architecture with machine-enforced layering via
+  `import-linter`.
+- **Testing:** 66+ tests with property-based testing (Hypothesis) and
+  regression oracles pinned against the prototype.
 
-## Frontend (Prototype → React, Phase 1e)
+## Frontend (Prototype + React client)
 
-The original `index.html` prototype lives in the root; it will be deleted once the React client reaches parity.
+The original `index.html` prototype lives in `.local-dev/` (arcade UX:
+falling terms, voice input, score/streak/timer) and stays until the React
+client reaches parity with it.
 
-- Falling/moving terms that can be tapped/clicked.
-- Type an expansion/definition.
-- Browser speech recognition where supported.
-- Score, streak, level and timer.
+`services/web/` is a minimal React client (Vite + React 19 + TypeScript +
+Tailwind v4) covering the core loop: fetch a random term, submit an answer
+against the real API, show the graded result. It doesn't yet replicate the
+arcade presentation — see [services/web/README.md](./services/web/README.md)
+for dev setup and [docs/game-rules.md](./docs/game-rules.md) for how
+scoring works (also readable in-app via the "How to play" panel).
 
 ## Quick Start
 
@@ -53,12 +64,17 @@ See [docs/skills-map.md](./docs/skills-map.md) for capability coverage (what's d
 
 ## Next Steps
 
-- **Phase 1d:** PostgreSQL adapter for terms, run migrations, seed test data
-  — done when terms load from the database and `POST /answers/submit` works end-to-end.
-- **Phase 1e:** Session persistence (SQLAlchemy Session entity, Alembic)
-  — done when session state survives a container restart.
-- **Phase 1f:** React client, delete `index.html`
-  — done when the prototype UI is fully replaced and removed.
+- ~~**Phase 1d:** PostgreSQL adapter for terms, run migrations, seed test
+  data~~ — done: terms load from the database, `POST /answers/submit`
+  verified end-to-end.
+- ~~**Phase 1e:** Session persistence (SQLAlchemy Session entity,
+  Alembic)~~ — done: session state survives a container restart, verified
+  live.
+- ~~**Phase 1f:** React client~~ — done (minimal scope): `services/web/`
+  covers the core submit/grade loop against the real API. Deleting
+  `.local-dev/index.html` is deferred until the client reaches parity with
+  its arcade UX (falling terms, voice input, settings, score/streak/timer)
+  — not yet scheduled to a phase.
 - **Phase 2:** LLM-based grading (Celery + Claude), streaming rubric feedback
   — done when grading quality exceeds the deterministic rubric and feedback streams live.
 - **Phase 3:** Microservices split (content-service), Kafka event log, GraphQL BFF
@@ -70,6 +86,8 @@ See [docs/skills-map.md](./docs/skills-map.md) for capability coverage (what's d
 
 Later / not yet scheduled to a phase:
 
+- React client parity with the `.local-dev` prototype (falling terms, voice
+  input, settings, score/streak/timer), then delete the prototype.
 - Game modes: Sprint, Survival, Boss Round, Daily 20.
 - Separate term knowledge from presentation: term, aliases, explanation, examples, difficulty, tags, prerequisites.
 - Spaced repetition (FSRS/SM-2 style) instead of repeating random terms.

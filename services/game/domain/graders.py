@@ -140,8 +140,8 @@ class FuzzyGrader:
             return GradeOutcome(
                 verdict=Verdict.PARTIAL,
                 rubric=RubricBreakdown(
-                    expansion=int(constants.EXPANSION_WEIGHT * best),
                     concept=0,
+                    expansion=int(constants.EXPANSION_WEIGHT * best),
                     purpose=0,
                     example=0,
                 ),

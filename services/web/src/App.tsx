@@ -21,6 +21,37 @@ function verdictColor(verdict: string): string {
   return "text-red-400";
 }
 
+// Condensed for in-app reading; full rules live in docs/game-rules.md.
+function HowToPlay() {
+  return (
+    <details className="bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-300 open:pb-4">
+      <summary className="cursor-pointer select-none px-4 py-3 font-medium text-slate-100">
+        How to play
+      </summary>
+      <div className="px-4 space-y-3">
+        <p>
+          You're shown a term. Type what it means and submit — you're
+          graded immediately, then move to the next term.
+        </p>
+        <div>
+          <p className="font-medium text-slate-200 mb-1">Scoring (0–100)</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            <li>Concept (40) — do you know what it is?</li>
+            <li>Expansion (30) — do you know what it stands for?</li>
+            <li>Purpose (20) — do you know what it's for?</li>
+            <li>Example (10) — can you ground it concretely?</li>
+          </ul>
+        </div>
+        <p>
+          Only Expansion scores today — grading is deterministic (exact /
+          alias / fuzzy match). An LLM judge that grades all four is
+          planned.
+        </p>
+      </div>
+    </details>
+  );
+}
+
 export default function App() {
   const [sessionId] = useState(getOrCreateSessionId);
   const [term, setTerm] = useState<TermPromptResponse | null>(null);
@@ -68,6 +99,8 @@ export default function App() {
         <h1 className="text-2xl font-bold tracking-tight text-center">
           Term Rush
         </h1>
+
+        <HowToPlay />
 
         {error && <p className="text-red-400 text-sm text-center">{error}</p>}
 

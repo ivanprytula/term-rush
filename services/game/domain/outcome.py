@@ -35,10 +35,10 @@ class MatchedVia(StrEnum):
 
 
 class RubricBreakdown(BaseModel):
-    """The four-part learning rubric (weights: 30-40-20-10).
+    """The four-part learning rubric (weights: 40-30-20-10, heaviest first).
 
-    Expansion: do you know what the letters stand for? (30 pts)
     Concept: do you know what it is? (40 pts)
+    Expansion: do you know what the letters stand for? (30 pts)
     Purpose: do you know what it is for? (20 pts)
     Example: can you ground it in something concrete? (10 pts)
 
@@ -50,14 +50,14 @@ class RubricBreakdown(BaseModel):
 
     model_config = {"frozen": True}
 
-    expansion: int = Field(ge=0, le=constants.EXPANSION_WEIGHT)
     concept: int = Field(ge=0, le=constants.CONCEPT_WEIGHT)
+    expansion: int = Field(ge=0, le=constants.EXPANSION_WEIGHT)
     purpose: int = Field(ge=0, le=constants.PURPOSE_WEIGHT)
     example: int = Field(ge=0, le=constants.EXAMPLE_WEIGHT)
 
     @property
     def total(self) -> int:
-        return self.expansion + self.concept + self.purpose + self.example
+        return self.concept + self.expansion + self.purpose + self.example
 
     @classmethod
     def expansion_only(cls) -> RubricBreakdown:
@@ -66,12 +66,12 @@ class RubricBreakdown(BaseModel):
         graders use this; the Phase 2 LLM judge fills in the rest.
         """
         return cls(
-            expansion=constants.EXPANSION_WEIGHT, concept=0, purpose=0, example=0
+            concept=0, expansion=constants.EXPANSION_WEIGHT, purpose=0, example=0
         )
 
     @classmethod
     def zero(cls) -> RubricBreakdown:
-        return cls(expansion=0, concept=0, purpose=0, example=0)
+        return cls(concept=0, expansion=0, purpose=0, example=0)
 
 
 class GradeOutcome(BaseModel):
