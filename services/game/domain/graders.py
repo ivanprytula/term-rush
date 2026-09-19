@@ -69,6 +69,44 @@ class Grader(Protocol):
     def grade(self, answer: str, term: Term) -> GradeOutcome | None: ...
 
 
+class ProfanityCheckerPort(Protocol):
+    """Detects offensive content. Implemented by an infrastructure adapter
+    wrapping a wordlist library — declared here, not in application/ports.py,
+    for the same reason as LLMJudgePort: it's a domain-level collaborator,
+    not an application-owned contract.
+    """
+
+    def is_offensive(self, text: str) -> bool: ...
+
+
+class ProfanityGrader:
+    """Rejects offensive answers before any other grader sees them.
+
+    First in the chain deliberately: cheap (local wordlist lookup, no I/O)
+    and unconditional — an offensive answer is never worth scoring on
+    correctness. Abstains (returns None) for clean answers, same as every
+    other non-terminal grader.
+    """
+
+    def __init__(self, checker: ProfanityCheckerPort) -> None:
+        self._checker = checker
+
+    @property
+    def matched_via(self) -> MatchedVia:
+        return MatchedVia.FLAGGED
+
+    def grade(self, answer: str, term: Term) -> GradeOutcome | None:
+        if not self._checker.is_offensive(answer):
+            return None
+        return GradeOutcome(
+            verdict=Verdict.INCORRECT,
+            rubric=RubricBreakdown.zero(),
+            matched_via=MatchedVia.FLAGGED,
+            confidence=1.0,
+            feedback="Let's keep it clean — try explaining the term instead.",
+        )
+
+
 class ExactGrader:
     """Exact match against the canonical expansion after normalization."""
 
@@ -182,6 +220,18 @@ class AnswerEvaluator:
         )
 
 
-def build_deterministic_evaluator() -> AnswerEvaluator:
-    """The Phase 1 chain, and the permanent fallback when the LLM is unavailable."""
-    return AnswerEvaluator((ExactGrader(), AliasGrader(), FuzzyGrader()))
+def build_deterministic_evaluator(
+    profanity_checker: ProfanityCheckerPort | None = None,
+) -> AnswerEvaluator:
+    """The Phase 1 chain, and the permanent fallback when the LLM is unavailable.
+
+    profanity_checker: opt-in. None (the default) omits ProfanityGrader
+    entirely — the chain is Exact/Alias/Fuzzy exactly as in Phase 1. Passing
+    a real ProfanityCheckerPort implementation (infrastructure adapter,
+    constructed by the caller — this module stays framework-free per
+    ADR-0003) prepends ProfanityGrader as the first, unconditional check.
+    """
+    graders: tuple[Grader, ...] = (ExactGrader(), AliasGrader(), FuzzyGrader())
+    if profanity_checker is not None:
+        graders = (ProfanityGrader(profanity_checker), *graders)
+    return AnswerEvaluator(graders)

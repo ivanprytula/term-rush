@@ -16,6 +16,7 @@ from domain.graders import AliasGrader
 from domain.graders import AnswerEvaluator
 from domain.graders import ExactGrader
 from domain.graders import FuzzyGrader
+from domain.graders import ProfanityGrader
 from domain.graders import build_deterministic_evaluator
 from domain.graders import normalize
 from domain.graders import token_similarity
@@ -94,6 +95,39 @@ class TestTokenSimilarity:
         assert token_similarity(text, text) == 1.0
 
 
+class _FakeProfanityChecker:
+    def __init__(self, offensive_words: frozenset[str] = frozenset()) -> None:
+        self._offensive_words = offensive_words
+
+    def is_offensive(self, text: str) -> bool:
+        tokens = set(normalize(text).split())
+        return bool(tokens & self._offensive_words)
+
+
+class TestProfanityGrader:
+    def test_abstains_on_clean_answer(self, uow_term: Term) -> None:
+        grader = ProfanityGrader(_FakeProfanityChecker())
+        assert grader.grade("Unit of Work", uow_term) is None
+
+    def test_flags_offensive_answer(self, uow_term: Term) -> None:
+        checker = _FakeProfanityChecker(offensive_words=frozenset({"badword"}))
+        grader = ProfanityGrader(checker)
+
+        outcome = grader.grade("you badword", uow_term)
+
+        assert outcome is not None
+        assert outcome.verdict is Verdict.INCORRECT
+        assert outcome.matched_via is MatchedVia.FLAGGED
+        assert outcome.rubric.total == 0
+
+    def test_flagged_answer_does_not_count_as_accepted(self, uow_term: Term) -> None:
+        checker = _FakeProfanityChecker(offensive_words=frozenset({"badword"}))
+        outcome = ProfanityGrader(checker).grade("badword", uow_term)
+
+        assert outcome is not None
+        assert outcome.is_accepted is False
+
+
 class TestExactGrader:
     def test_accepts_exact_expansion(self, uow_term: Term) -> None:
         outcome = ExactGrader().grade("Unit of Work", uow_term)
@@ -162,6 +196,32 @@ class TestAnswerEvaluator:
         """An exact answer must not fall through to the fuzzy grader."""
         outcome = build_deterministic_evaluator().evaluate("Unit of Work", uow_term)
         assert outcome.matched_via is MatchedVia.EXACT
+
+    def test_default_chain_omits_profanity_check(self, uow_term: Term) -> None:
+        """No checker passed: build_deterministic_evaluator() behaves exactly
+        as Phase 1, even on an answer that a checker would flag.
+        """
+        checker = _FakeProfanityChecker(offensive_words=frozenset({"badword"}))
+        assert checker.is_offensive("badword")  # sanity: the word IS flaggable
+
+        outcome = build_deterministic_evaluator().evaluate("badword", uow_term)
+
+        assert outcome.matched_via is not MatchedVia.FLAGGED
+
+    def test_profanity_grader_preempts_an_otherwise_exact_match(
+        self, uow_term: Term
+    ) -> None:
+        """Opted in (a checker is passed): an offensive answer that also
+        happens to contain the exact expansion must still be flagged, not
+        scored — ProfanityGrader runs first when present in the chain.
+        """
+        checker = _FakeProfanityChecker(offensive_words=frozenset({"badword"}))
+        evaluator = build_deterministic_evaluator(profanity_checker=checker)
+
+        outcome = evaluator.evaluate("Unit of Work badword", uow_term)
+
+        assert outcome.matched_via is MatchedVia.FLAGGED
+        assert outcome.verdict is Verdict.INCORRECT
 
     def test_falls_through_to_fuzzy(self, uow_term: Term) -> None:
         outcome = build_deterministic_evaluator().evaluate(
