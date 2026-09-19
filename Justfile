@@ -86,8 +86,8 @@ seed:
     export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/term_rush
     uv run python services/game/bin/run.py
 
-# Run API server with hot-reload (requires postgres + migrations run first).
-run-dev port="8000":
+# Run API server with hot-reload (always on :8000; requires postgres + migrations run first).
+dev:
     #!/usr/bin/env bash
     export PYTHONPATH=services/game
     export PROCESS_TYPE=api
@@ -95,6 +95,10 @@ run-dev port="8000":
     export REDIS_URL=redis://localhost:6379/0
     export ENVIRONMENT=development
     uv run python services/game/bin/run.py
+
+# Run the Vite dev server (proxies /sessions and /terms to dev on :8000).
+web port="5173":
+    cd services/web && npm run dev -- --port {{port}}
 
 # === Smoke Tests ===
 
