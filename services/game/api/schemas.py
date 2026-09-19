@@ -15,6 +15,8 @@ from pydantic import Field
 
 from domain import constants
 from domain.outcome import GradeOutcome
+from domain.outcome import StreamEvent
+from domain.outcome import StreamEventKind
 from domain.session import Session
 from domain.term import Term
 
@@ -28,6 +30,8 @@ class SubmitAnswerRequest(BaseModel):
 
     term_id: The term to grade against (1-64 chars).
     answer: The student's explanation (1-512 chars).
+    use_llm_grading: opt into the LLM rubric judge for PARTIAL verdicts. No
+    effect if the server has no LLM grader configured.
     """
 
     term_id: str = Field(
@@ -38,6 +42,7 @@ class SubmitAnswerRequest(BaseModel):
         min_length=constants.ANSWER_MIN_LEN,
         max_length=constants.ANSWER_MAX_LEN,
     )
+    use_llm_grading: bool = False
 
 
 class RubricBreakdownResponse(BaseModel):
@@ -101,6 +106,39 @@ class SubmitAnswerResponse(BaseModel):
                 example=outcome.rubric.example,
                 total=outcome.rubric.total,
             ),
+        )
+
+
+class RationaleDeltaEvent(BaseModel):
+    """SSE 'rationale_delta' payload: one chunk of live LLM feedback text."""
+
+    text: str
+
+
+class SubmitAnswerStreamEvent(BaseModel):
+    """One SSE frame from POST .../submit/stream, shaped for sse-starlette.
+
+    event: "rationale_delta" (data: RationaleDeltaEvent) while the LLM judge
+    is generating feedback, then exactly one "graded" (data:
+    SubmitAnswerResponse) as the final frame. A verdict that never escalates
+    emits only the single "graded" frame.
+    """
+
+    event: str
+    data: str
+
+    @staticmethod
+    def from_stream_event(event: StreamEvent) -> SubmitAnswerStreamEvent:
+        if event.kind is StreamEventKind.RATIONALE_DELTA:
+            assert event.text is not None
+            return SubmitAnswerStreamEvent(
+                event=StreamEventKind.RATIONALE_DELTA.value,
+                data=RationaleDeltaEvent(text=event.text).model_dump_json(),
+            )
+        assert event.outcome is not None
+        return SubmitAnswerStreamEvent(
+            event=StreamEventKind.GRADED.value,
+            data=SubmitAnswerResponse.from_outcome(event.outcome).model_dump_json(),
         )
 
 

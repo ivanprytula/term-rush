@@ -75,8 +75,11 @@ See [docs/skills-map.md](./docs/skills-map.md) for capability coverage (what's d
   `.local-dev/index.html` is deferred until the client reaches parity with
   its arcade UX (falling terms, voice input, settings, score/streak/timer)
   — not yet scheduled to a phase.
-- **Phase 2:** LLM-based grading (Celery + Claude), streaming rubric feedback
-  — done when grading quality exceeds the deterministic rubric and feedback streams live.
+- ~~**Phase 2:** LLM-based grading (Claude), streaming rubric feedback~~ —
+  done: grading quality exceeds the deterministic rubric (concept, purpose,
+  and example scored, not just expansion), feedback streams live over SSE,
+  verified end-to-end. Celery was scoped out: a synchronous in-request call
+  is fast enough at current latency/throughput; revisit if that changes.
 - **Phase 3:** Microservices split (content-service), Kafka event log, GraphQL BFF
   — done when a second service exists and talks to the first over the network, not imports.
 - **Phase 4:** GCP deployment (Cloud Run), AWS modules (reviewable), Kubernetes (local kind)

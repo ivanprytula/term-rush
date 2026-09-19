@@ -4,9 +4,14 @@ import {
   submitAnswerSessionsSessionIdAnswersSubmitPost,
 } from "./client";
 import type { SubmitAnswerResponse, TermPromptResponse } from "./client";
+import { submitAnswerStream } from "./submitAnswerStream";
 
 const SESSION_ID_KEY = "term-rush-session-id";
+const THEME_KEY = "term-rush-theme";
 const ROUND_LENGTH = 10;
+
+const THEMES = ["phosphor", "devtool", "synthwave"] as const;
+type Theme = (typeof THEMES)[number];
 
 function getOrCreateSessionId(): string {
   const existing = localStorage.getItem(SESSION_ID_KEY);
@@ -16,54 +21,123 @@ function getOrCreateSessionId(): string {
   return created;
 }
 
+// index.html's inline pre-paint script already set data-theme on <html>
+// from localStorage (or left it unset, meaning "phosphor" via :root's
+// default) — read that same source so React's state agrees with what's
+// already on screen instead of flashing a second theme on mount.
+function getInitialTheme(): Theme {
+  const attr = document.documentElement.getAttribute("data-theme");
+  return (THEMES as readonly string[]).includes(attr ?? "")
+    ? (attr as Theme)
+    : "phosphor";
+}
+
+function ThemeToggle({
+  theme,
+  onCycle,
+}: {
+  theme: Theme;
+  onCycle: () => void;
+}) {
+  return (
+    <button
+      onClick={onCycle}
+      aria-label={`Switch theme (currently ${theme})`}
+      className="fixed top-4 right-4 text-xs text-text-muted hover:text-text border border-surface-border hover:border-phosphor px-2 py-1 transition"
+    >
+      {theme}
+    </button>
+  );
+}
+
 const VERDICT_STYLE: Record<string, { color: string; label: string }> = {
-  correct: { color: "text-green-400", label: "Correct" },
-  partial: { color: "text-yellow-400", label: "Partially correct" },
-  incorrect: { color: "text-slate-300", label: "Not quite" },
+  correct: { color: "text-phosphor", label: "CORRECT" },
+  partial: { color: "text-amber", label: "PARTIAL" },
+  incorrect: { color: "text-text-muted", label: "NOT QUITE" },
 };
 
-// Color alone doesn't carry the verdict (WCAG 1.4.1) — each state gets its
-// own label text too. Incorrect reads muted, not alarming: a wrong answer
-// is normal mid-round, not a failure state worth a loud red flag.
+// Color alone doesn't carry the verdict (WCAG 1.4.1) — bracket-delimited
+// text label too, the way a test runner or linter reports status. Incorrect
+// reads muted, not alarming: a wrong answer is normal mid-round, not a
+// failure state worth a loud flag.
 function verdictDisplay(verdict: string): { color: string; label: string } {
   return VERDICT_STYLE[verdict] ?? VERDICT_STYLE.incorrect;
 }
 
-// Deterministic grading only scores Expansion today; Concept/Purpose/Example
-// always read 0. Shown so a low score reads as "not graded yet", not "you
-// got this wrong" — see docs/game-rules.md.
-function RubricNote({ rubric }: { rubric: SubmitAnswerResponse["rubric"] }) {
+// Deterministic grading only scores Expansion; Concept/Purpose/Example
+// always read 0 there — shown so a low score reads as "not graded yet", not
+// "you got this wrong" (see docs/game-rules.md). Once the LLM judge grades
+// (matched_via "llm_rubric"), all four are real scores, so the caveat would
+// be actively wrong — skip it.
+function RubricNote({
+  rubric,
+  matchedVia,
+}: {
+  rubric: SubmitAnswerResponse["rubric"];
+  matchedVia: string;
+}) {
+  if (matchedVia === "llm_rubric") return null;
   return (
-    <p className="text-xs text-slate-500">
-      Expansion {rubric.expansion}/30 scored · Concept, Purpose, and Example
-      aren't graded yet
+    <p className="text-xs text-text-muted">
+      expansion={rubric.expansion}/30 · concept, purpose, example not graded
+      yet
     </p>
   );
 }
 
 function ResultPanel({
   result,
+  requestedLlmGrading,
+  streamedFeedback,
   continueLabel,
   onContinue,
 }: {
   result: SubmitAnswerResponse;
+  requestedLlmGrading: boolean;
+  // The rationale text as it streamed in, kept on screen instead of
+  // result.feedback once grading completes. They come from two separate
+  // LLM calls (tool_use can't stream), so swapping one for the other at
+  // the end reads as a jarring, near-duplicate replace — see llm_grader.py.
+  streamedFeedback: string | null;
   continueLabel: string;
   onContinue: () => void;
 }) {
   const verdict = verdictDisplay(result.verdict);
+  const llmGraded = result.matched_via === "llm_rubric";
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 space-y-3">
+    <div className="bg-surface border border-surface-border p-6 space-y-3">
       <p className={`text-xl font-bold ${verdict.color}`}>
-        {verdict.label} · <span className="font-mono">{result.score}/100</span>
+        [ {verdict.label} ] <span>{result.score}/100</span>
       </p>
-      <RubricNote rubric={result.rubric} />
-      <p className="text-slate-300 text-sm">{result.feedback}</p>
-      <button
-        onClick={onContinue}
-        className="w-full rounded-lg bg-sky-600 hover:bg-sky-500 px-4 py-3 font-medium transition"
+      <RubricNote rubric={result.rubric} matchedVia={result.matched_via} />
+      {/* Explains why AI feedback was requested but nothing streamed — the
+          escalation only fires on a PARTIAL deterministic verdict, so a
+          clear match or clear miss silently skips it otherwise. */}
+      {requestedLlmGrading && !llmGraded && (
+        <p className="text-xs text-text-muted">
+          # AI feedback only kicks in on ambiguous answers — this one was
+          clear-cut.
+        </p>
+      )}
+      <p className="text-text-dim text-sm">
+        {llmGraded && streamedFeedback ? streamedFeedback : result.feedback}
+      </p>
+      {/* <form> so Enter activates this too, not just a mouse click —
+          matches native behavior, no keyboard listener needed. */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onContinue();
+        }}
       >
-        {continueLabel}
-      </button>
+        <button
+          type="submit"
+          autoFocus
+          className="w-full bg-phosphor text-ground hover:bg-phosphor-dim px-4 py-3 font-bold transition"
+        >
+          {continueLabel}
+        </button>
+      </form>
     </div>
   );
 }
@@ -83,24 +157,32 @@ function RoundSummary({
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 space-y-4 text-center">
+    <div className="bg-surface border border-surface-border p-6 space-y-4 text-center">
       <div>
-        <p className="text-sm text-slate-400 mb-1">Round complete</p>
-        <p className="text-3xl font-mono font-bold tracking-tight">
+        <p className="text-sm text-text-dim mb-1"># round complete</p>
+        <p className="text-3xl font-bold tracking-tight">
           {totalScore}/{ROUND_LENGTH * 100}
         </p>
       </div>
       <div className="flex justify-center gap-4 text-sm">
-        <span className="text-green-400">{counts.correct} correct</span>
-        <span className="text-yellow-400">{counts.partial} partial</span>
-        <span className="text-red-400">{counts.incorrect} incorrect</span>
+        <span className="text-phosphor">{counts.correct} correct</span>
+        <span className="text-amber">{counts.partial} partial</span>
+        <span className="text-text-muted">{counts.incorrect} incorrect</span>
       </div>
-      <button
-        onClick={onPlayAgain}
-        className="w-full rounded-lg bg-sky-600 hover:bg-sky-500 px-4 py-3 font-medium transition"
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onPlayAgain();
+        }}
       >
-        Play again
-      </button>
+        <button
+          type="submit"
+          autoFocus
+          className="w-full bg-phosphor text-ground hover:bg-phosphor-dim px-4 py-3 font-bold transition"
+        >
+          play again
+        </button>
+      </form>
     </div>
   );
 }
@@ -108,9 +190,9 @@ function RoundSummary({
 // Condensed for in-app reading; full rules live in docs/game-rules.md.
 function HowToPlay() {
   return (
-    <details className="bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-300 open:pb-4">
-      <summary className="cursor-pointer select-none px-4 py-3 font-medium text-slate-100">
-        How to play
+    <details className="bg-surface border border-surface-border text-sm text-text-dim open:pb-4">
+      <summary className="cursor-pointer select-none px-4 py-3 font-bold text-text">
+        $ man term-rush
       </summary>
       <div className="px-4 space-y-3">
         <p>
@@ -118,18 +200,18 @@ function HowToPlay() {
           graded immediately, then move to the next term.
         </p>
         <div>
-          <p className="font-medium text-slate-200 mb-1">Scoring (0–100)</p>
+          <p className="font-bold text-text mb-1"># scoring (0-100)</p>
           <ul className="list-disc list-inside space-y-0.5">
-            <li>Concept (40) — do you know what it is?</li>
-            <li>Expansion (30) — do you know what it stands for?</li>
-            <li>Purpose (20) — do you know what it's for?</li>
-            <li>Example (10) — can you ground it concretely?</li>
+            <li>concept (40) — do you know what it is?</li>
+            <li>expansion (30) — do you know what it stands for?</li>
+            <li>purpose (20) — do you know what it's for?</li>
+            <li>example (10) — can you ground it concretely?</li>
           </ul>
         </div>
         <p>
-          Only Expansion scores today — grading is deterministic (exact /
-          alias / fuzzy match). An LLM judge that grades all four is
-          planned.
+          Only expansion scores by default — grading is deterministic
+          (exact / alias / fuzzy match). Check "get AI feedback" to escalate
+          ambiguous answers to an LLM judge that grades all four.
         </p>
       </div>
     </details>
@@ -143,12 +225,25 @@ type AppError = { message: string; retryAction: "load" | "submit" };
 
 export default function App() {
   const [sessionId] = useState(getOrCreateSessionId);
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [term, setTerm] = useState<TermPromptResponse | null>(null);
   const [answer, setAnswer] = useState("");
   const [result, setResult] = useState<SubmitAnswerResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<AppError | null>(null);
   const [answers, setAnswers] = useState<SubmitAnswerResponse[]>([]);
+  // Opt-in: escalates a PARTIAL verdict to the LLM rubric judge, streamed
+  // live. No effect on CORRECT/INCORRECT verdicts or if the server has no
+  // LLM grader configured — see POST .../submit/stream docs.
+  const [useLlmGrading, setUseLlmGrading] = useState(false);
+  // Non-null while an LLM judge's feedback is streaming in; distinct from
+  // `result` (the final graded outcome) so the UI can show growing text
+  // before the rubric score exists.
+  const [liveFeedback, setLiveFeedback] = useState<string | null>(null);
+  // useLlmGrading's value at the moment `result` was requested — not the
+  // live checkbox state, which the player could change before the result
+  // renders. Answers "did we ask for AI feedback on this result?".
+  const [requestedLlmGrading, setRequestedLlmGrading] = useState(false);
 
   const roundComplete = answers.length >= ROUND_LENGTH;
 
@@ -156,6 +251,7 @@ export default function App() {
     setError(null);
     setResult(null);
     setAnswer("");
+    setLiveFeedback(null);
     const { data } = await getRandomTermTermsRandomGet();
     // The generated client can return a falsy `error` (e.g. "") on some
     // failure shapes, so check for a real response body instead of
@@ -176,10 +272,51 @@ export default function App() {
     loadTerm();
   }, []);
 
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  const cycleTheme = () => {
+    setTheme((prev) => THEMES[(THEMES.indexOf(prev) + 1) % THEMES.length]);
+  };
+
+  const finishGrading = (data: SubmitAnswerResponse) => {
+    setResult(data);
+    setAnswers((prev) => [...prev, data]);
+    // liveFeedback is intentionally left as-is here: ResultPanel shows it
+    // instead of result.feedback for an LLM-graded answer (see its props
+    // comment) — cleared on the next loadTerm(), not on every grade.
+  };
+
   const submitAnswer = async () => {
     if (!term || !answer.trim()) return;
     setLoading(true);
     setError(null);
+    setRequestedLlmGrading(useLlmGrading);
+
+    if (useLlmGrading) {
+      setLiveFeedback("");
+      await submitAnswerStream(
+        sessionId,
+        { term_id: term.id, answer, use_llm_grading: true },
+        {
+          onRationaleDelta: (text) =>
+            setLiveFeedback((prev) => (prev ?? "") + text),
+          onGraded: (data) => {
+            setLoading(false);
+            finishGrading(data);
+          },
+          onError: (message) => {
+            setLoading(false);
+            setLiveFeedback(null);
+            setError({ message, retryAction: "submit" });
+          },
+        },
+      );
+      return;
+    }
+
     const { data } = await submitAnswerSessionsSessionIdAnswersSubmitPost({
       path: { session_id: sessionId },
       body: { term_id: term.id, answer },
@@ -189,8 +326,7 @@ export default function App() {
       setError({ message: "Grading failed.", retryAction: "submit" });
       return;
     }
-    setResult(data);
-    setAnswers((prev) => [...prev, data]);
+    finishGrading(data);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -199,53 +335,86 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6">
+    <div className="min-h-screen bg-ground text-text flex items-center justify-center p-4">
+      <ThemeToggle theme={theme} onCycle={cycleTheme} />
+      <main className="w-full max-w-md space-y-6">
         <h1 className="text-2xl font-bold tracking-tight text-center">
-          Term Rush
+          <span className="text-phosphor">~/</span>term-rush
+          <span className="animate-pulse text-phosphor">_</span>
         </h1>
 
         <HowToPlay />
 
         {!roundComplete && (
-          <p className="text-sm text-slate-500 text-center font-mono">
-            Term {Math.min(answers.length + 1, ROUND_LENGTH)}/{ROUND_LENGTH}
+          <p className="text-sm text-text-dim text-center">
+            term {Math.min(answers.length + 1, ROUND_LENGTH)}/{ROUND_LENGTH}
           </p>
         )}
 
         {error && (
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 space-y-3 text-center">
-            <p className="text-red-400 text-sm">{error.message}</p>
-            <button
-              onClick={error.retryAction === "load" ? loadTerm : submitAnswer}
-              className="w-full rounded-lg bg-sky-600 hover:bg-sky-500 px-4 py-3 font-medium transition"
+          // role="alert": screen readers announce this the moment it
+          // appears, without the user needing to navigate to find it —
+          // sighted users already get that signal for free from the red text.
+          <div
+            role="alert"
+            className="bg-surface border border-surface-border p-6 space-y-3 text-center"
+          >
+            <p className="text-amber text-sm">! {error.message}</p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                (error.retryAction === "load" ? loadTerm : submitAnswer)();
+              }}
             >
-              Retry
-            </button>
+              <button
+                type="submit"
+                autoFocus
+                className="w-full bg-phosphor text-ground hover:bg-phosphor-dim px-4 py-3 font-bold transition"
+              >
+                retry
+              </button>
+            </form>
           </div>
         )}
 
         {term && !result && !roundComplete && (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="bg-slate-900 border border-sky-800 rounded-xl p-6 text-center">
-              <p className="text-sm text-slate-400 mb-1">Define this term:</p>
-              <p className="text-3xl font-mono font-bold tracking-tight">
+            <div className="bg-surface border border-phosphor-dim p-6 text-center">
+              <p className="text-sm text-text-dim mb-1"># define this term</p>
+              <p className="text-3xl font-bold tracking-tight">
                 {term.term}
               </p>
             </div>
-            <input
-              autoFocus
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              placeholder="Type your answer…"
-              className="w-full rounded-lg bg-slate-900 border border-slate-700 px-4 py-3 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
-            />
+            <div className="flex items-center gap-2 bg-surface border border-surface-border px-4 py-3 focus-within:border-phosphor">
+              <span className="text-phosphor select-none">&gt;</span>
+              <input
+                autoFocus
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                placeholder="type your answer…"
+                className="w-full bg-transparent text-text placeholder:text-text-muted focus:outline-none"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-text-dim">
+              <input
+                type="checkbox"
+                checked={useLlmGrading}
+                onChange={(e) => setUseLlmGrading(e.target.checked)}
+                className="accent-phosphor bg-surface border-surface-border"
+              />
+              get AI feedback on ambiguous answers
+            </label>
+            {liveFeedback !== null && (
+              <p className="text-sm text-text-dim italic min-h-5">
+                {liveFeedback || "thinking…"}
+              </p>
+            )}
             <button
               type="submit"
               disabled={loading || !answer.trim()}
-              className="w-full rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-3 font-medium transition"
+              className="w-full bg-phosphor text-ground hover:bg-phosphor-dim disabled:opacity-40 disabled:cursor-not-allowed px-4 py-3 font-bold transition"
             >
-              {loading ? "Grading…" : "Submit"}
+              {loading ? "grading…" : "submit"}
             </button>
           </form>
         )}
@@ -253,7 +422,9 @@ export default function App() {
         {result && (
           <ResultPanel
             result={result}
-            continueLabel={roundComplete ? "See results" : "Next term"}
+            requestedLlmGrading={requestedLlmGrading}
+            streamedFeedback={liveFeedback}
+            continueLabel={roundComplete ? "see results" : "next term"}
             onContinue={roundComplete ? () => setResult(null) : loadTerm}
           />
         )}
@@ -261,7 +432,7 @@ export default function App() {
         {roundComplete && !result && (
           <RoundSummary answers={answers} onPlayAgain={startNewRound} />
         )}
-      </div>
+      </main>
     </div>
   );
 }

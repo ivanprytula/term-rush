@@ -78,6 +78,60 @@ def test_submit_answer_exact_match(client_with_uow_term: TestClient) -> None:
     assert response.json()["verdict"] == "correct"
 
 
+def test_submit_answer_offensive_answer_is_flagged(
+    client_with_uow_term: TestClient,
+) -> None:
+    """An offensive answer is rejected before any correctness grading, via
+    the real DI-wired evaluator (ProfanityGrader is baked into
+    api.dependencies.get_answer_evaluator, not just build_deterministic_evaluator).
+    """
+    response = client_with_uow_term.post(
+        "/sessions/s1/answers/submit",
+        json={"term_id": "uow", "answer": "fuck this game"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["verdict"] == "incorrect"
+    assert body["matched_via"] == "flagged"
+    assert body["score"] == 0
+
+
+def test_submit_answer_stream_exact_match(client_with_uow_term: TestClient) -> None:
+    """POST .../submit/stream with an exact match streams a single 'graded'
+    SSE event — nothing to stream when the deterministic verdict is CORRECT.
+    """
+    with client_with_uow_term.stream(
+        "POST",
+        "/sessions/s1/answers/submit/stream",
+        json={"term_id": "uow", "answer": "Unit of Work"},
+    ) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        body = "".join(response.iter_text())
+
+    assert "event: graded" in body
+    assert "rationale_delta" not in body
+    assert '"verdict":"correct"' in body
+
+
+def test_submit_answer_stream_term_not_found(
+    client_with_uow_term: TestClient,
+) -> None:
+    """A nonexistent term surfaces as an 'error' SSE event: the response has
+    already started streaming (200) by the time grading fails, so it can't
+    become an HTTP 404.
+    """
+    with client_with_uow_term.stream(
+        "POST",
+        "/sessions/s1/answers/submit/stream",
+        json={"term_id": "nonexistent", "answer": "anything"},
+    ) as response:
+        assert response.status_code == 200
+        body = "".join(response.iter_text())
+
+    assert "event: error" in body
+
+
 def test_submit_answer_missing_term_id(client: TestClient) -> None:
     """POST with missing term_id returns 422."""
     response = client.post(

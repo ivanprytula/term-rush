@@ -92,11 +92,15 @@ Run before claiming anything works: `just check` (from the repo root).
 
 - `term_id` (string, 1-64 chars): the term being answered
 - `answer` (string, 1-512 chars): the student's explanation
+- `use_llm_grading` (bool, default `false`): opt into LLM escalation on a
+  PARTIAL deterministic verdict. No effect if the server has no LLM grader
+  configured (`ANTHROPIC_API_KEY` unset).
 
 **Response (200):**
 
 - `verdict` (enum): one of `correct`, `partial`, `incorrect`
-- `matched_via` (enum): grading path: `exact`, `alias`, `fuzzy`, `llm_rubric`
+- `matched_via` (enum): grading path: `exact`, `alias`, `fuzzy`,
+  `llm_rubric`, `flagged`
 - `confidence` (float, 0.0-1.0): certainty of the match (exact=1.0, fuzzy~0.5)
 - `score` (int, 0-100): sum of rubric components
 - `feedback` (string): localized explanation for the student
@@ -113,7 +117,19 @@ Run before claiming anything works: `just check` (from the repo root).
 - `404`: term not found (ValueError raised by use case)
 - `500`: internal error (unexpected exception)
 
-**Determinism & caching:** Identical answers always return the same outcome (in-memory cache Phase 1).
+**Determinism & caching:** Identical answers always return the same outcome
+(in-memory cache; not shared across processes).
+
+**Streaming variant:** `POST /sessions/{session_id}/answers/submit/stream`
+takes the same request body and always responds `text/event-stream`. When
+the deterministic verdict is PARTIAL and `use_llm_grading` is set, it emits
+`rationale_delta` SSE events (`{"text": string}`) as the LLM judge's
+feedback streams in, then one final `graded` event carrying the same shape
+as the non-streaming response above. Otherwise it emits only that single
+`graded` event immediately. A term-not-found failure surfaces as an
+`error` SSE event (`data` is the message), not an HTTP 404 - the response
+has already started streaming by the time grading can fail. See ADR-0013
+for the prompt-injection defenses on the LLM path.
 
 ## Input Validation & Security
 
@@ -130,6 +146,12 @@ Every significant decision gets an ADR in `docs/adr/`, including a **"When I wou
 change this"** section. An ADR without a stated reversal condition is an advertisement,
 not a decision record. `docs/skills-map.md` tracks capability coverage honestly,
 including deliberate omissions.
+
+**Update related docs whenever functionality changes** - a code change that shifts
+behavior a doc describes is not done until the doc says the new thing. Check
+especially `docs/game-rules.md` (player-facing rules: scoring, verdicts, grading
+paths) and `docs/development.md` (setup/workflow) - both drift silently otherwise,
+and a stale doc is worse than no doc because it's trusted.
 
 **Markdown files:** Always specify the language in fenced code blocks (` ```text`, ` ```bash`,
 ` ```python`, ` ```json`, etc.). This enables proper syntax highlighting and linting.
@@ -179,7 +201,7 @@ docs/
 
 Root:
   pyproject.toml    # Workspace config, tool settings (ruff, ty, pytest, coverage)
-  Justfile          # Task automation (sync, test, quality, arch, check, build, run, smoke, clean, coverage)
+  Justfile          # Task automation (sync, test, quality, arch, check, up/down, migrate, seed, dev, web, smoke, clean, coverage)
   compose.yml       # Local dev stack (postgres, redis, game API)
   .pre-commit-config.yaml  # Pre-commit hooks (prek)
 ```
@@ -193,8 +215,15 @@ Root:
 - `just arch` - Verify import-linter contracts
 - `just arch-verify` - Prove contracts fail on violation (negative test)
 - `just check` - quality + arch + test (full gate)
-- `just build` - Docker build (monolith image)
-- `just run [port]` - Run API container (default 8000)
-- `just smoke` - Build, start, probe /health and /ready, tear down
+- `just up` - Start postgres + redis (docker compose)
+- `just down` - Stop postgres + redis
+- `just migrate` - Run Alembic migrations against local postgres
+- `just seed` - Seed the terms table (requires postgres + migrations)
+- `just dev` - Run the API with hot-reload on :8000 (requires postgres +
+  migrations)
+- `just web [port]` - Run the Vite dev server (default 5173; proxies to
+  dev on :8000)
+- `just smoke` - Docker build, start, probe /health and /ready, tear down
+- `just shell` - Python REPL in the game service's environment
 - `just clean` - Remove `__pycache__`, `.cache`, coverage artifacts
 - `just precommit` - Run pre-commit hooks (prek run --all-files)

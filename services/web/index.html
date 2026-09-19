@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Term Rush</title>
+    <!-- Set data-theme before first paint, so switching themes across
+         reloads never flashes the previous theme's colors while React
+         hydrates. Kept out of App.tsx: this is a pre-paint concern, not
+         app state. -->
+    <script>
+      (function () {
+        var saved = localStorage.getItem("term-rush-theme");
+        if (saved) document.documentElement.setAttribute("data-theme", saved);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

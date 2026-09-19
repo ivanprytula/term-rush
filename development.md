@@ -59,7 +59,7 @@ Start supporting services for local development:
 just up   # Start postgres and redis
 just down # Stop postgres and redis
 just migrate       # Run database migrations (requires postgres running)
-just run-dev       # Run API server with hot-reload (requires postgres + migrations)
+just dev           # Run API server with hot-reload (requires postgres + migrations)
 just smoke         # Full integration test: build image, start, probe /health and /ready
 ```
 
@@ -82,7 +82,7 @@ just up
 just migrate
 
 # Local: run API (assumes migrations complete)
-just run-dev
+just dev
 
 # Docker Compose sidecar (before starting game service)
 docker compose --profile tools run migrate

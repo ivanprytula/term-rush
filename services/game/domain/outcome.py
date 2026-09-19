@@ -32,6 +32,7 @@ class MatchedVia(StrEnum):
     ALIAS = "alias"
     FUZZY = "fuzzy"
     LLM_RUBRIC = "llm_rubric"
+    FLAGGED = "flagged"
 
 
 class RubricBreakdown(BaseModel):
@@ -97,3 +98,35 @@ class GradeOutcome(BaseModel):
         sooner than punish a player who understood most of it.
         """
         return self.verdict in (Verdict.CORRECT, Verdict.PARTIAL)
+
+
+class StreamEventKind(StrEnum):
+    """What kind of event a streamed grading response emits."""
+
+    RATIONALE_DELTA = "rationale_delta"
+    GRADED = "graded"
+
+
+class StreamEvent(BaseModel):
+    """One frame of a streamed grading response.
+
+    RATIONALE_DELTA carries a chunk of live LLM feedback text (`text` set,
+    `outcome` None) — zero or more of these, only when escalating to the LLM
+    judge. GRADED carries the final GradeOutcome (`outcome` set, `text`
+    None) — always exactly one, last. A verdict that never escalates (no
+    opt-in, not PARTIAL, cache hit) emits only the single GRADED frame.
+    """
+
+    model_config = {"frozen": True}
+
+    kind: StreamEventKind
+    text: str | None = None
+    outcome: GradeOutcome | None = None
+
+    @classmethod
+    def rationale_delta(cls, text: str) -> StreamEvent:
+        return cls(kind=StreamEventKind.RATIONALE_DELTA, text=text)
+
+    @classmethod
+    def graded(cls, outcome: GradeOutcome) -> StreamEvent:
+        return cls(kind=StreamEventKind.GRADED, outcome=outcome)
