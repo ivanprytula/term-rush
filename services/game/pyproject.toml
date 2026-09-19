@@ -18,6 +18,9 @@ dependencies = [
   "opentelemetry-exporter-prometheus>=0.48b0",
   "opentelemetry-instrumentation-fastapi>=0.48b0",
   "python-json-logger>=2.0.7",
+  "anthropic>=0.69",
+  "better-profanity-fast>=0.1.1",
+  "sse-starlette>=3.4.11",
 ]
 
 [dependency-groups]
