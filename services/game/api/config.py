@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"
-    API_PORT: int = 8000
-    API_HOST: str = "0.0.0.0"
+    ANTHROPIC_API_KEY: str | None = None
+    ENABLE_PROFANITY_CHECK: bool = True
 
 
 settings = Settings()  # type: ignore # ty: ignore[unused-ignore-comment]

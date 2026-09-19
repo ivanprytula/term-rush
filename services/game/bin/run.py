@@ -44,11 +44,17 @@ def run_seed() -> None:
 
 
 def run_api() -> None:
-    """Start the FastAPI server."""
+    """Start the FastAPI server.
+
+    Host/port are fixed, not configurable: 0.0.0.0 so the container is
+    reachable from outside (127.0.0.1 would only bind inside the
+    container), 8000 matching the Dockerfile's EXPOSE and every compose/
+    Justfile caller.
+    """
     uvicorn.run(
         "api.app:app",
-        host=settings.API_HOST,
-        port=settings.API_PORT,
+        host="0.0.0.0",
+        port=8000,
         reload=settings.ENVIRONMENT == "development",
     )
 

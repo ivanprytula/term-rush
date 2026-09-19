@@ -80,7 +80,7 @@ using one.
 | Rate limiting | ⏳ P1 | Redis sliding window on auth + grading endpoints |
 | Dependency scanning | ⏳ P1 | `pip-audit` + `npm audit` in CI, failing the build |
 | Input validation at trust boundaries | ⏳ P1 | Pydantic at every edge; length caps on free-text answers before they reach an LLM prompt |
-| Prompt injection defense | ⏳ P2 | Player answers are untrusted input flowing into an LLM. Delimited, instruction-hierarchy'd, output-validated. ADR-0013 — this is the security topic most AI portfolio projects ignore entirely. |
+| Prompt injection defense | ✅ Covered | Player answers are untrusted input flowing into an LLM. Structured tool-use output, delimiter-escaped, instruction-hierarchy'd, output-clamped. `infrastructure/llm_judge.py`, ADR-0013 — this is the security topic most AI portfolio projects ignore entirely. No adversarial classifier yet; scope and reversal condition recorded in the ADR. |
 
 ### Observability: logs, metrics, traces
 
