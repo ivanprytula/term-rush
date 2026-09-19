@@ -41,5 +41,6 @@ services/web/src/client/
 
 .claude/
 .agents/
+.impeccable/
 
 .vscode/
