@@ -12,6 +12,7 @@ repos:
           - --unsafe
       - id: check-toml
       - id: check-json
+        exclude: ^services/web/tsconfig.*\.json$
       - id: check-merge-conflict
       - id: check-added-large-files
       - id: detect-private-key

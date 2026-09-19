@@ -18,6 +18,10 @@ node_modules/
 dist/
 .vite/
 
+# Generated API client (regenerate via services/web's `npm run generate-client`)
+services/web/openapi.json
+services/web/src/client/
+
 # Env & secrets — never commit real values, only .example files
 .env
 .env.*
