@@ -1,0 +1,158 @@
+[
+  {
+    "id": "uow",
+    "term": "UoW",
+    "expansion": "Unit of Work",
+    "definitions": [
+      "Pattern that groups related changes into one transactional unit."
+    ],
+    "aliases": [
+      "Unit-of-Work"
+    ],
+    "categories": [
+      "architecture"
+    ],
+    "difficulty": 4,
+    "examples": [
+      "Committing several repository writes as one transaction."
+    ]
+  },
+  {
+    "id": "idempotent",
+    "term": "Idempotent",
+    "expansion": "Idempotency",
+    "definitions": [
+      "An operation that produces the same result no matter how many times it is applied."
+    ],
+    "categories": [
+      "distributed-systems"
+    ],
+    "difficulty": 3,
+    "examples": [
+      "Retrying a PUT request is safe because it is idempotent."
+    ]
+  },
+  {
+    "id": "cap-theorem",
+    "term": "CAP Theorem",
+    "expansion": "Consistency, Availability, Partition tolerance",
+    "definitions": [
+      "A distributed system can guarantee at most two of consistency, availability, and partition tolerance at once."
+    ],
+    "aliases": [
+      "CAP"
+    ],
+    "categories": [
+      "distributed-systems"
+    ],
+    "difficulty": 5,
+    "examples": [
+      "Choosing AP over CP during a network partition."
+    ]
+  },
+  {
+    "id": "acid",
+    "term": "ACID",
+    "expansion": "Atomicity, Consistency, Isolation, Durability",
+    "definitions": [
+      "The four guarantees a database transaction makes so the data stays correct even if something fails partway through."
+    ],
+    "categories": [
+      "databases"
+    ],
+    "difficulty": 3,
+    "examples": [
+      "A bank transfer either moves the full amount or none of it."
+    ]
+  },
+  {
+    "id": "cqrs",
+    "term": "CQRS",
+    "expansion": "Command Query Responsibility Segregation",
+    "definitions": [
+      "Splitting the model that handles writes from the model that handles reads, instead of using one model for both."
+    ],
+    "categories": [
+      "architecture"
+    ],
+    "difficulty": 4,
+    "examples": [
+      "Writes go through a normalized write model; reads come from a denormalized view built for the query."
+    ]
+  },
+  {
+    "id": "circuit-breaker",
+    "term": "Circuit Breaker",
+    "expansion": "stop calling a failing service for a while",
+    "definitions": [
+      "A guard that stops calling a failing downstream service for a while, instead of retrying into an outage."
+    ],
+    "categories": [
+      "distributed-systems"
+    ],
+    "difficulty": 3,
+    "examples": [
+      "After enough failed calls, requests to a dead payment API fail fast instead of timing out one by one."
+    ]
+  },
+  {
+    "id": "backpressure",
+    "term": "Backpressure",
+    "expansion": "slow consumer signals a fast producer to slow down",
+    "definitions": [
+      "A way for a slow consumer to signal a fast producer to slow down, so the gap between them doesn't grow without bound."
+    ],
+    "categories": [
+      "distributed-systems"
+    ],
+    "difficulty": 4,
+    "examples": [
+      "A queue that stops accepting new messages once it's full, until the consumer catches up."
+    ]
+  },
+  {
+    "id": "eventual-consistency",
+    "term": "Eventual Consistency",
+    "expansion": "replicas converge to the same value given no new writes",
+    "definitions": [
+      "A consistency model where replicas are allowed to disagree temporarily, but will converge to the same value given no new writes."
+    ],
+    "categories": [
+      "distributed-systems"
+    ],
+    "difficulty": 3,
+    "examples": [
+      "A DNS change takes time to propagate; different resolvers see the old and new value for a while."
+    ]
+  },
+  {
+    "id": "saga-pattern",
+    "term": "Saga Pattern",
+    "expansion": "local transactions with compensating actions to undo them",
+    "definitions": [
+      "A way to keep data consistent across multiple services by running a sequence of local transactions, each with a compensating action to undo it if a later step fails."
+    ],
+    "categories": [
+      "architecture"
+    ],
+    "difficulty": 5,
+    "examples": [
+      "An order saga reserves inventory, then charges the card; if the charge fails, it releases the reserved inventory."
+    ]
+  },
+  {
+    "id": "bulkhead",
+    "term": "Bulkhead",
+    "expansion": "isolate resources per dependency so one can't exhaust them all",
+    "definitions": [
+      "Isolating resources (thread pools, connections) per dependency so one failing dependency can't exhaust resources needed by the rest of the system."
+    ],
+    "categories": [
+      "distributed-systems"
+    ],
+    "difficulty": 4,
+    "examples": [
+      "Giving the slow reporting API its own connection pool so it can't starve the checkout flow's connections."
+    ]
+  }
+]
