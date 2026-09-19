@@ -19,20 +19,37 @@ Typing just the expansion ("Unit of Work") scores 30. Explaining the
 concept, purpose, and giving an example scores up to 100 — that inversion
 is deliberate: recognizing an acronym is worth less than understanding it.
 
-**Phase 1** (current): grading is deterministic — exact match, known
-alias, or fuzzy text similarity against the expansion. Only the
-Expansion component can score; Concept/Purpose/Example are 0 until
-Phase 2.
+Grading always starts deterministic — exact match, known alias, or fuzzy
+text similarity against the expansion — and only the Expansion component
+can score there; Concept/Purpose/Example stay 0 unless the LLM judge grades
+the answer.
 
-**Phase 2** (planned): an LLM judge grades the full explanation against
-all four components.
+## Getting AI feedback
+
+Check **"Get AI feedback on ambiguous answers"** before submitting. It only
+does something when your deterministic verdict comes back **Partial** —
+the ambiguous case the fuzzy matcher itself is least sure about. A clear
+match or a clear miss is trusted as-is; the LLM only adjudicates the
+middle.
+
+When it kicks in, feedback streams in live, sentence by sentence, while
+the judge is still writing it. A moment after the text finishes, the
+final score appears with the full four-part breakdown. If the LLM call
+fails for any reason, you silently keep the deterministic score instead —
+grading never blocks on it.
+
+Answers are also checked for offensive content before anything else runs;
+a flagged answer scores 0 and skips grading entirely, regardless of the
+toggle.
 
 ## Verdicts
 
 - **Correct** — matched exactly, via a known alias, or fuzzy match ≥0.62
-  similarity.
-- **Partial** — fuzzy match between 0.40 and 0.62; you were close.
-- **Incorrect** — below 0.40, or no match.
+  similarity, or the LLM judge scored ≥70/100.
+- **Partial** — fuzzy match between 0.40 and 0.62 (or, after LLM
+  escalation, a score between 40 and 69).
+- **Incorrect** — below 0.40 with no LLM escalation, an LLM score below
+  40, or a flagged offensive answer.
 
 ## Matched via
 
@@ -41,7 +58,9 @@ Shown alongside your result — which check produced the verdict:
 - **exact** — you typed the expansion exactly.
 - **alias** — you typed a recognized alternate spelling.
 - **fuzzy** — text-similarity match against the expansion.
-- **llm_rubric** — graded by the LLM judge (Phase 2).
+- **llm_rubric** — graded by the LLM judge, after a Partial verdict and
+  opting in.
+- **flagged** — the answer was rejected as offensive before grading.
 
 ## Sessions
 
