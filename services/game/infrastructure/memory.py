@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 from typing import Any
 
 from application.ports import EventPublisher
@@ -23,6 +24,11 @@ class InMemoryTermRepository(TermRepository):
 
     async def by_id(self, term_id: str) -> Term | None:
         return self.terms.get(term_id)
+
+    async def random(self) -> Term | None:
+        if not self.terms:
+            return None
+        return random.choice(list(self.terms.values()))
 
 
 class InMemorySessionRepository(SessionRepository):

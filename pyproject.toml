@@ -21,6 +21,7 @@ keywords = [
 
 [tool.uv.workspace]
 members = ["services/*"]
+exclude = ["services/web"]
 
 [tool.uv]
 default-groups = ["dev"]

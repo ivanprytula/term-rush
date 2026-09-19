@@ -21,6 +21,10 @@ class TermRepository(ABC):
     async def by_id(self, term_id: str) -> Term | None:
         """Fetch a term by ID. None if not found."""
 
+    @abstractmethod
+    async def random(self) -> Term | None:
+        """Fetch a random term. None if the term bank is empty."""
+
 
 class SessionRepository(ABC):
     """Persist and retrieve play-through sessions."""

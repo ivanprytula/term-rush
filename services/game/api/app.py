@@ -13,6 +13,7 @@ from api.dependencies import _engine
 from api.dependencies import _init_session_factory
 from api.routers import answers
 from api.routers import sessions
+from api.routers import terms
 from domain.session import SessionFull
 from infrastructure.logging import configure_logging
 
@@ -50,6 +51,7 @@ async def inject_task_name(request: Request, call_next):
 
 app.include_router(answers.router)
 app.include_router(sessions.router)
+app.include_router(terms.router)
 
 
 @app.get("/health")

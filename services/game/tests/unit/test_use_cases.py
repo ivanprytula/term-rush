@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from application.use_cases import GetRandomTerm
 from application.use_cases import GetSession
 from application.use_cases import SubmitAnswer
 from domain.outcome import Verdict
@@ -131,3 +132,18 @@ async def test_submit_answer_records_cached_outcome_again(
     session = await uow.sessions.by_id("session-1")
     assert session is not None
     assert len(session.answers) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_random_term_returns_a_seeded_term(uow: InMemoryUnitOfWork) -> None:
+    """Fetching a random term returns one from the term bank."""
+    term = await GetRandomTerm(uow).execute()
+    assert term.id == "uow"
+
+
+@pytest.mark.asyncio
+async def test_get_random_term_empty_bank_raises() -> None:
+    """Fetching a random term from an empty bank raises ValueError."""
+    empty_uow = InMemoryUnitOfWork()
+    with pytest.raises(ValueError, match="No terms"):
+        await GetRandomTerm(empty_uow).execute()

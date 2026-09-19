@@ -16,6 +16,7 @@ from pydantic import Field
 from domain import constants
 from domain.outcome import GradeOutcome
 from domain.session import Session
+from domain.term import Term
 
 SessionIdPath = Annotated[
     str, Path(min_length=1, max_length=constants.SESSION_ID_MAX_LEN)
@@ -137,6 +138,20 @@ class SessionResponse(BaseModel):
                 for a in session.answers
             ],
         )
+
+
+class TermPromptResponse(BaseModel):
+    """A term presented to the player. Excludes the expansion/definitions
+    so the answer isn't leaked in the prompt.
+    """
+
+    id: str
+    term: str
+
+    @staticmethod
+    def from_term(term: Term) -> TermPromptResponse:
+        """Convert a Term to a prompt response."""
+        return TermPromptResponse(id=term.id, term=term.term)
 
 
 class ErrorResponse(BaseModel):

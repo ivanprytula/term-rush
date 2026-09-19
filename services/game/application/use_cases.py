@@ -15,6 +15,7 @@ from domain.graders import build_deterministic_evaluator
 from domain.outcome import GradeOutcome
 from domain.session import Session
 from domain.session import SubmittedAnswer
+from domain.term import Term
 
 
 class SubmitAnswer:
@@ -97,3 +98,18 @@ class GetSession:
             if session is None:
                 raise ValueError(f"Session {session_id} not found")
             return session
+
+
+class GetRandomTerm:
+    """Fetch a random term to present to the player."""
+
+    def __init__(self, uow: UnitOfWork) -> None:
+        self.uow = uow
+
+    async def execute(self) -> Term:
+        """Return a random term. Raises ValueError if the term bank is empty."""
+        async with self.uow:
+            term = await self.uow.terms.random()
+            if term is None:
+                raise ValueError("No terms available")
+            return term

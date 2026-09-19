@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +26,17 @@ class SQLTermRepository(TermRepository):
     async def by_id(self, term_id: str) -> Term | None:
         """Fetch a term by ID from the database."""
         stmt = select(TermModel).where(TermModel.id == term_id)
+        result = await self.session.execute(stmt)
+        model = result.scalars().first()
+        if not model:
+            return None
+        assert isinstance(model.data, str)
+        data = json.loads(model.data)
+        return Term(**data)
+
+    async def random(self) -> Term | None:
+        """Fetch a random term from the database."""
+        stmt = select(TermModel).order_by(func.random()).limit(1)
         result = await self.session.execute(stmt)
         model = result.scalars().first()
         if not model:
