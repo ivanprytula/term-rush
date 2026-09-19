@@ -7,18 +7,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from application.ports import UnitOfWork
 from infrastructure.memory import InMemoryEventPublisher
 from infrastructure.memory import InMemoryGradeCache
+from infrastructure.sql_repositories import SQLSessionRepository
 from infrastructure.sql_repositories import SQLTermRepository
 
 
 class SQLUnitOfWork(UnitOfWork):
     """Transaction coordinator backed by SQLAlchemy.
 
-    Grade cache and events remain in-memory for Phase 1; PostgreSQL for terms only.
+    Grade cache and events remain in-memory for Phase 1; PostgreSQL for terms
+    and sessions.
     """
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.terms = SQLTermRepository(session)
+        self.sessions = SQLSessionRepository(session)
         self.grade_cache = InMemoryGradeCache()
         self.events = InMemoryEventPublisher()
         self._in_transaction = False

@@ -37,6 +37,19 @@ class TermModel(Base):
     data: Mapped[str] = mapped_column(String(4096), nullable=False)
 
 
+class SessionModel(Base):
+    """Session entity in the database (stored as JSON for flexibility).
+
+    Column length: worst case is SESSION_MAX_ANSWERS answers at max field
+    lengths, ~37KB serialized; 65536 leaves headroom without another migration.
+    """
+
+    __tablename__ = "sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    data: Mapped[str] = mapped_column(String(65536), nullable=False)
+
+
 async def create_db_engine(database_url: str) -> tuple[Any, Any]:
     """Create async engine and session factory.
 

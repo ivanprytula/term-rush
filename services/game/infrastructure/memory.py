@@ -7,9 +7,11 @@ from typing import Any
 
 from application.ports import EventPublisher
 from application.ports import GradeCache
+from application.ports import SessionRepository
 from application.ports import TermRepository
 from application.ports import UnitOfWork
 from domain.outcome import GradeOutcome
+from domain.session import Session
 from domain.term import Term
 
 
@@ -21,6 +23,19 @@ class InMemoryTermRepository(TermRepository):
 
     async def by_id(self, term_id: str) -> Term | None:
         return self.terms.get(term_id)
+
+
+class InMemorySessionRepository(SessionRepository):
+    """Store sessions in a dict. Does not survive a process restart."""
+
+    def __init__(self, sessions: dict[str, Session] | None = None) -> None:
+        self.sessions = sessions or {}
+
+    async def by_id(self, session_id: str) -> Session | None:
+        return self.sessions.get(session_id)
+
+    async def save(self, session: Session) -> None:
+        self.sessions[session.id] = session
 
 
 class InMemoryGradeCache(GradeCache):
@@ -57,8 +72,10 @@ class InMemoryUnitOfWork(UnitOfWork):
     def __init__(
         self,
         terms: dict[str, Term] | None = None,
+        sessions: dict[str, Session] | None = None,
     ) -> None:
         self.terms = InMemoryTermRepository(terms)
+        self.sessions = InMemorySessionRepository(sessions)
         self.grade_cache = InMemoryGradeCache()
         self.events = InMemoryEventPublisher()
         self._in_transaction = False

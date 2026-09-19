@@ -14,7 +14,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    DATABASE_URL: PostgresDsn
+    DATABASE_URL: PostgresDsn | None = None
     REDIS_URL: str = "redis://localhost:6379/0"
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"

@@ -10,6 +10,7 @@ from abc import ABC
 from abc import abstractmethod
 
 from domain.outcome import GradeOutcome
+from domain.session import Session
 from domain.term import Term
 
 
@@ -19,6 +20,18 @@ class TermRepository(ABC):
     @abstractmethod
     async def by_id(self, term_id: str) -> Term | None:
         """Fetch a term by ID. None if not found."""
+
+
+class SessionRepository(ABC):
+    """Persist and retrieve play-through sessions."""
+
+    @abstractmethod
+    async def by_id(self, session_id: str) -> Session | None:
+        """Fetch a session by ID. None if not found."""
+
+    @abstractmethod
+    async def save(self, session: Session) -> None:
+        """Create or replace a session."""
 
 
 class GradeCache(ABC):
@@ -49,6 +62,7 @@ class UnitOfWork(ABC):
     """
 
     terms: TermRepository
+    sessions: SessionRepository
     grade_cache: GradeCache
     events: EventPublisher
 

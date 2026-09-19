@@ -6,11 +6,20 @@ All bounds sourced from domain.constants for consistency.
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Annotated
+
+from fastapi import Path
 from pydantic import BaseModel
 from pydantic import Field
 
 from domain import constants
 from domain.outcome import GradeOutcome
+from domain.session import Session
+
+SessionIdPath = Annotated[
+    str, Path(min_length=1, max_length=constants.SESSION_ID_MAX_LEN)
+]
 
 
 class SubmitAnswerRequest(BaseModel):
@@ -91,6 +100,42 @@ class SubmitAnswerResponse(BaseModel):
                 example=outcome.rubric.example,
                 total=outcome.rubric.total,
             ),
+        )
+
+
+class SubmittedAnswerResponse(BaseModel):
+    """One recorded answer in a session's history."""
+
+    term_id: str
+    verdict: str = Field(examples=["correct", "partial", "incorrect"])
+    score: int = Field(ge=constants.MIN_SCORE, le=constants.MAX_SCORE)
+    matched_via: str = Field(examples=["exact", "alias", "fuzzy", "llm_rubric"])
+    submitted_at: datetime
+
+
+class SessionResponse(BaseModel):
+    """A session's recorded answer history."""
+
+    id: str
+    created_at: datetime
+    answers: list[SubmittedAnswerResponse]
+
+    @staticmethod
+    def from_session(session: Session) -> SessionResponse:
+        """Convert a Session to a response."""
+        return SessionResponse(
+            id=session.id,
+            created_at=session.created_at,
+            answers=[
+                SubmittedAnswerResponse(
+                    term_id=a.term_id,
+                    verdict=a.verdict.value,
+                    score=a.score,
+                    matched_via=a.matched_via.value,
+                    submitted_at=a.submitted_at,
+                )
+                for a in session.answers
+            ],
         )
 
 

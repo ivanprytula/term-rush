@@ -40,3 +40,7 @@ FUZZY_MATCH_THRESHOLD = 0.62  # ADR-0002: substring match passes at 0.62
 
 # Scheduling / review priority
 RECENT_WINDOW_DAYS = 7  # How long a term stays "recent" after first introduction
+
+# Session bounds
+SESSION_ID_MAX_LEN = 64
+SESSION_MAX_ANSWERS = 200  # generous ceiling; no game mode runs this long yet

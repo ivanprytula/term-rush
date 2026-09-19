@@ -12,6 +12,8 @@ from opentelemetry.baggage import set_baggage
 from api.dependencies import _engine
 from api.dependencies import _init_session_factory
 from api.routers import answers
+from api.routers import sessions
+from domain.session import SessionFull
 from infrastructure.logging import configure_logging
 
 configure_logging()
@@ -47,6 +49,7 @@ async def inject_task_name(request: Request, call_next):
 
 
 app.include_router(answers.router)
+app.include_router(sessions.router)
 
 
 @app.get("/health")
@@ -78,4 +81,13 @@ async def value_error_handler(_request: Request, exc: ValueError) -> JSONRespons
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={"error": str(exc), "status_code": 404},
+    )
+
+
+@app.exception_handler(SessionFull)
+async def session_full_handler(_request: Request, _exc: SessionFull) -> JSONResponse:
+    """A session that has reached its answer limit is a client-side error."""
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={"error": "Session has reached its answer limit", "status_code": 422},
     )
