@@ -80,10 +80,13 @@ class InMemoryUnitOfWork(UnitOfWork):
         self,
         terms: dict[str, Term] | None = None,
         sessions: dict[str, Session] | None = None,
+        grade_cache: GradeCache | None = None,
     ) -> None:
         self.terms = InMemoryTermRepository(terms)
         self.sessions = InMemorySessionRepository(sessions)
-        self.grade_cache = InMemoryGradeCache()
+        self.grade_cache = (
+            grade_cache if grade_cache is not None else InMemoryGradeCache()
+        )
         self.events = InMemoryEventPublisher()
         self._in_transaction = False
         self._lock: asyncio.Lock | None = None

@@ -21,6 +21,7 @@ from game_service.infrastructure.database import create_db_engine
 from game_service.infrastructure.grpc_term_repository import GrpcTermRepository
 from game_service.infrastructure.kafka_event_publisher import KafkaEventPublisher
 from game_service.infrastructure.llm_judge import AnthropicJudgePort
+from game_service.infrastructure.memory import InMemoryGradeCache
 from game_service.infrastructure.memory import InMemoryUnitOfWork
 from game_service.infrastructure.profanity_checker import BetterProfanityChecker
 from game_service.infrastructure.sql_uow import SQLUnitOfWork
@@ -55,6 +56,13 @@ _llm_grader: LLMRubricGrader | None = (
 _answer_evaluator = build_deterministic_evaluator(
     BetterProfanityChecker() if settings.ENABLE_PROFANITY_CHECK else None
 )
+
+# One grade cache for the process's life, not per-request: a UnitOfWork is
+# constructed fresh on every request, so a cache built inside it would never
+# see a second lookup for the same term_id+answer. Shared here the same way
+# _term_repository is shared, for both the SQL and in-memory (no DATABASE_URL)
+# paths — the bug this corrects affected both.
+_grade_cache = InMemoryGradeCache()
 
 
 async def _init_session_factory() -> None:
@@ -96,16 +104,19 @@ async def _init_session_factory() -> None:
 async def get_unit_of_work() -> AsyncGenerator[UnitOfWork]:
     """Provide a Unit of Work for the request (in-memory for tests, SQL for production).
 
-    Manages session lifecycle: creates on entry, closes on exit. terms is a
-    shared GrpcTermRepository instance (its lookup cache spans requests).
+    Manages session lifecycle: creates on entry, closes on exit. terms
+    (GrpcTermRepository) and grade_cache are both shared instances whose
+    lookups span requests, not reconstructed per call.
     """
     if _session_factory is None:
-        uow = InMemoryUnitOfWork()
+        uow = InMemoryUnitOfWork(grade_cache=_grade_cache)
         yield uow
     else:
         assert _term_repository is not None  # set alongside _session_factory
         async with _session_factory() as session:
-            yield SQLUnitOfWork(session, _term_repository, _event_publisher)
+            yield SQLUnitOfWork(
+                session, _term_repository, _event_publisher, _grade_cache
+            )
 
 
 def get_llm_grader() -> LLMRubricGrader | None:
