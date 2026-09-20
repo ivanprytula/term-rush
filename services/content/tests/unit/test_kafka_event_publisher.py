@@ -1,4 +1,4 @@
-"""KafkaEventPublisher tests: envelope shape, topic, delivery."""
+"""KafkaEventPublisher tests: envelope shape, topic, delivery, failure handling."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import json
 import pytest
 from aiokafka.errors import KafkaConnectionError
 
-from game_service.infrastructure.kafka_event_publisher import TOPIC
-from game_service.infrastructure.kafka_event_publisher import KafkaEventPublisher
+from content_service.infrastructure.kafka_event_publisher import TOPIC
+from content_service.infrastructure.kafka_event_publisher import KafkaEventPublisher
 
 
 class _FakeProducer:
@@ -32,10 +32,10 @@ def _publisher(*, fails: bool = False) -> tuple[KafkaEventPublisher, _FakeProduc
 
 
 @pytest.mark.asyncio
-async def test_publish_sends_to_the_answers_graded_topic() -> None:
+async def test_publish_sends_to_the_terms_published_topic() -> None:
     publisher, producer = _publisher()
 
-    await publisher.publish("AnswerGraded", {"term_id": "uow", "verdict": "correct"})
+    await publisher.publish("TermPublished", {"term_id": "uow"})
 
     assert len(producer.sent) == 1
     topic, _ = producer.sent[0]
@@ -46,12 +46,12 @@ async def test_publish_sends_to_the_answers_graded_topic() -> None:
 async def test_publish_serializes_the_event_envelope() -> None:
     publisher, producer = _publisher()
 
-    await publisher.publish("AnswerGraded", {"term_id": "uow", "verdict": "correct"})
+    await publisher.publish("TermPublished", {"term_id": "uow"})
 
     _, value = producer.sent[0]
     envelope = json.loads(value)
-    assert envelope["event_type"] == "AnswerGraded"
-    assert envelope["payload"] == {"term_id": "uow", "verdict": "correct"}
+    assert envelope["event_type"] == "TermPublished"
+    assert envelope["payload"] == {"term_id": "uow"}
     assert envelope["schema_version"] == 1
     assert "event_id" in envelope
     assert "occurred_at" in envelope
@@ -59,9 +59,9 @@ async def test_publish_serializes_the_event_envelope() -> None:
 
 @pytest.mark.asyncio
 async def test_publish_swallows_a_broker_failure() -> None:
-    """A Kafka outage must not fail the caller's request (grading an answer)."""
+    """A Kafka outage must not fail the caller's request (publishing a term)."""
     publisher, producer = _publisher(fails=True)
 
-    await publisher.publish("AnswerGraded", {"term_id": "uow"})
+    await publisher.publish("TermPublished", {"term_id": "uow"})
 
     assert producer.sent == []
