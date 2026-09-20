@@ -11,13 +11,13 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from domain.llm_grader import LLMJudgment
-from domain.llm_grader import LLMRubricGrader
-from domain.outcome import MatchedVia
-from domain.outcome import Verdict
-from domain.term import Category
-from domain.term import Difficulty
-from domain.term import Term
+from game_service.domain.llm_grader import LLMJudgment
+from game_service.domain.llm_grader import LLMRubricGrader
+from game_service.domain.outcome import MatchedVia
+from game_service.domain.outcome import Verdict
+from game_service.domain.term import Category
+from game_service.domain.term import Difficulty
+from game_service.domain.term import Term
 
 
 @pytest.fixture

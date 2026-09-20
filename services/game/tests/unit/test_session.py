@@ -8,12 +8,12 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from domain import constants
-from domain.outcome import MatchedVia
-from domain.outcome import Verdict
-from domain.session import Session
-from domain.session import SessionFull
-from domain.session import SubmittedAnswer
+from game_service.domain import constants
+from game_service.domain.outcome import MatchedVia
+from game_service.domain.outcome import Verdict
+from game_service.domain.session import Session
+from game_service.domain.session import SessionFull
+from game_service.domain.session import SubmittedAnswer
 
 
 @pytest.fixture

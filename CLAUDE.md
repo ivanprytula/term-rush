@@ -45,7 +45,7 @@ Default, escape the Rabbit hole, Optimize for change, Simple as possible, Scream
 
 ## Code Style
 
-- Follow existing FastAPI patterns in `services/game/api/app.py`
+- Follow existing FastAPI patterns in `services/game/game_service/api/app.py`
 - **FastAPI Annotated style:** Use `Annotated[Type, Depends(...)]` for dependencies; creates reusable type aliases (e.g., `SessionTokenDep = Annotated[TokenPayload, Depends(...)]`). Path parameters use `Annotated[str, Path(...)]` to validate at the API boundary.
 - Use `ruff` for linting and formatting (config in `pyproject.toml`: auto-fix, line-length 88, import sorting)
 - Use `ty` for type checking
@@ -171,10 +171,11 @@ After making a change:
 
 ```text
 services/game/
-  domain/           # Entities, value objects, graders (framework-free)
-  application/      # Use cases, Ports (Protocols)
-  infrastructure/   # Adapters (in-memory, SQLAlchemy, Redis, etc.)
-  api/              # FastAPI routers, dependency injection
+  game_service/
+    domain/           # Entities, value objects, graders (framework-free)
+    application/      # Use cases, Ports (Protocols)
+    infrastructure/   # Adapters (in-memory, SQLAlchemy, Redis, etc.)
+    api/              # FastAPI routers, dependency injection
   tests/
     unit/           # Domain and use-case tests
     integration/    # API and adapter tests (FastAPI TestClient)

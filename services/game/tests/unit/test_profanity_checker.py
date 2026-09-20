@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from infrastructure.profanity_checker import BetterProfanityChecker
+from game_service.infrastructure.profanity_checker import BetterProfanityChecker
 
 
 class TestBetterProfanityChecker:

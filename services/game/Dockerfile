@@ -1,7 +1,6 @@
 # Monolith build: one image holds every workspace member. Only one service
-# (game) exists today, so CMD runs it directly — see ADR-0007 on why services
-# aren't namespaced yet. Splitting into per-service images stays a one-file
-# change once a second service exists.
+# (game) exists today, so CMD runs it directly. Splitting into per-service
+# images stays a one-file change once a second service exists (ADR-0006).
 
 FROM python:3.14-slim-trixie AS builder
 
@@ -30,8 +29,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY pyproject.toml uv.lock ./
 
 COPY services/game/pyproject.toml services/game/
+COPY services/content/pyproject.toml services/content/
+COPY libs/core/pyproject.toml libs/core/
 
 COPY services/ services/
+COPY libs/ libs/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --all-packages
@@ -43,19 +45,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 RUN groupadd --system app && useradd --system --gid app --no-create-home app
 
 ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONPATH="/app/services/game" \
+    PYTHONPATH="/app/services/game:/app/services/content" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --from=builder --chown=app:app /app/services /app/services
+COPY --from=builder --chown=app:app /app/libs /app/libs
 COPY --chown=app:app alembic.ini /app/
-COPY --chown=app:app services/game/alembic/ /app/alembic/
+COPY --chown=app:app alembic-content.ini /app/
 
-WORKDIR /app/services/game
+WORKDIR /app
 
 USER app
 EXPOSE 8000
+EXPOSE 8001
 
-# 12-factor app: same binary everywhere. PROCESS_TYPE env var determines behavior.
-CMD ["python", "bin/run.py"]
+# 12-factor app: same binary everywhere. PROCESS_TYPE env var determines
+# behavior. CMD defaults to game-service; compose overrides it for content
+# (ADR-0006: one image, command-selected service).
+CMD ["python", "services/game/game_service/bin/run.py"]

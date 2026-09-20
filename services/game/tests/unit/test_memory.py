@@ -7,8 +7,8 @@ from datetime import datetime
 
 import pytest
 
-from domain.session import Session
-from infrastructure.memory import InMemorySessionRepository
+from game_service.domain.session import Session
+from game_service.infrastructure.memory import InMemorySessionRepository
 
 
 @pytest.fixture

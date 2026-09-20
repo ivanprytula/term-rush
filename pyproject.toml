@@ -20,7 +20,7 @@ keywords = [
 ]
 
 [tool.uv.workspace]
-members = ["services/*"]
+members = ["services/*", "libs/*"]
 exclude = ["services/web"]
 
 [tool.uv]
@@ -44,6 +44,7 @@ dev = [
 line-length = 88
 cache-dir = ".cache/ruff"
 fix = true
+extend-exclude = ["libs/term-proto/src/term_proto/*_pb2*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
@@ -53,7 +54,7 @@ force-single-line = true
 split-on-trailing-comma = false
 
 [tool.pytest.ini_options]
-testpaths = ["services"]
+testpaths = ["services/game", "libs"]
 asyncio_mode = "auto"
 cache_dir = ".cache/pytest"
 addopts = "--cov=services/game --cov-report=term-missing --cov-report=html:coverage"

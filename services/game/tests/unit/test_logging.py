@@ -6,7 +6,7 @@ from io import StringIO
 
 import pytest
 
-from infrastructure.logging import StructuredFormatter
+from game_service.infrastructure.logging import StructuredFormatter
 
 
 @pytest.fixture

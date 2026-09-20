@@ -14,11 +14,11 @@ from typing import Any
 import pytest
 from anthropic.types import ToolUseBlock
 
-from domain.term import Category
-from domain.term import Difficulty
-from domain.term import Term
-from infrastructure.llm_judge import AnthropicJudgePort
-from infrastructure.llm_judge import _escape_delimiter
+from game_service.domain.term import Category
+from game_service.domain.term import Difficulty
+from game_service.domain.term import Term
+from game_service.infrastructure.llm_judge import AnthropicJudgePort
+from game_service.infrastructure.llm_judge import _escape_delimiter
 
 
 @pytest.fixture

@@ -22,7 +22,7 @@ Coupling migrations into the API bootstrap means:
 
 ## Decision
 
-One binary (`services/game/bin/run.py`) runs everywhere. The `PROCESS_TYPE` environment variable determines behavior—migrations or API. This honors the 12-factor app principle: same code, different config.
+One binary (`services/game/game_service/bin/run.py`) runs everywhere. The `PROCESS_TYPE` environment variable determines behavior—migrations or API. This honors the 12-factor app principle: same code, different config.
 
 ### Implementation
 
@@ -37,7 +37,7 @@ PROCESS_TYPE=api python bin/run.py        # Start API
 
 ```bash
 # Run manually before starting API
-PROCESS_TYPE=migrate python services/game/bin/run.py
+PROCESS_TYPE=migrate python services/game/game_service/bin/run.py
 
 # Or via compose
 docker compose --profile tools run migrate
