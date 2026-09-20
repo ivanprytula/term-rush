@@ -20,8 +20,14 @@ class TermRepository(ABC):
         """Fetch a term by ID. None if not found."""
 
     @abstractmethod
-    async def random(self) -> Term | None:
-        """Fetch a random term. None if the term bank is empty."""
+    async def random(self, excluded_ids: frozenset[str] = frozenset()) -> Term | None:
+        """Fetch a random term, avoiding excluded_ids where possible.
+
+        Falls back to the full bank (excluded_ids ignored) once every term
+        is excluded, rather than returning None — a round that has shown
+        every term in the bank should repeat, not error. None only if the
+        bank itself is empty.
+        """
 
     @abstractmethod
     async def upsert(self, term: Term) -> None:

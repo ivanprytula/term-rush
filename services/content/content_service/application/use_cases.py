@@ -25,15 +25,15 @@ class GetTermById:
 
 
 class GetRandomTerm:
-    """Fetch a random term."""
+    """Fetch a random term, avoiding a caller-supplied exclusion set."""
 
     def __init__(self, uow: UnitOfWork) -> None:
         self.uow = uow
 
-    async def execute(self) -> Term:
+    async def execute(self, excluded_ids: frozenset[str] = frozenset()) -> Term:
         """Return a random term. Raises ValueError if the term bank is empty."""
         async with self.uow:
-            term = await self.uow.terms.random()
+            term = await self.uow.terms.random(excluded_ids)
             if term is None:
                 raise ValueError("No terms available")
             return term

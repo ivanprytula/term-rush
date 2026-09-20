@@ -31,11 +31,19 @@ class SQLTermRepository(TermRepository):
         data = json.loads(model.data)
         return Term(**data)
 
-    async def random(self) -> Term | None:
-        """Fetch a random term from the database."""
+    async def random(self, excluded_ids: frozenset[str] = frozenset()) -> Term | None:
+        """Fetch a random term, avoiding excluded_ids where possible.
+
+        Falls back to the full bank once excluded_ids covers every term
+        (a round that has shown everything should repeat, not fail).
+        """
         stmt = select(TermModel).order_by(func.random()).limit(1)
+        if excluded_ids:
+            stmt = stmt.where(TermModel.id.not_in(excluded_ids))
         result = await self.session.execute(stmt)
         model = result.scalars().first()
+        if not model and excluded_ids:
+            return await self.random()
         if not model:
             return None
         assert isinstance(model.data, str)

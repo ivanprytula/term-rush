@@ -22,8 +22,13 @@ class TermRepository(ABC):
         """Fetch a term by ID. None if not found."""
 
     @abstractmethod
-    async def random(self) -> Term | None:
-        """Fetch a random term. None if the term bank is empty."""
+    async def random(self, excluded_ids: frozenset[str] = frozenset()) -> Term | None:
+        """Fetch a random term, avoiding excluded_ids where possible.
+
+        content-service falls back to the full bank once excluded_ids
+        covers every term, rather than failing — None only if the bank
+        itself is empty.
+        """
 
 
 class SessionRepository(ABC):

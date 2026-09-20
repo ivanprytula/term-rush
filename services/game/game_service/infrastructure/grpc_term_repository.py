@@ -76,9 +76,10 @@ class GrpcTermRepository(TermRepository):
         self._cache[term_id] = (term, time.monotonic())
         return term
 
-    async def random(self) -> Term | None:
+    async def random(self, excluded_ids: frozenset[str] = frozenset()) -> Term | None:
         try:
-            reply = await self._stub.GetRandom(term_pb2.GetRandomRequest())
+            request = term_pb2.GetRandomRequest(excluded_ids=excluded_ids)
+            reply = await self._stub.GetRandom(request)
         except grpc.aio.AioRpcError as exc:
             logger.warning("content-service GetRandom failed: %s", exc)
             return None

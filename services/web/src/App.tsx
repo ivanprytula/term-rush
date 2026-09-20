@@ -252,7 +252,9 @@ export default function App() {
     setResult(null);
     setAnswer("");
     setLiveFeedback(null);
-    const { data } = await getRandomTermTermsRandomGet();
+    const { data } = await getRandomTermTermsRandomGet({
+      query: { session_id: sessionId },
+    });
     // The generated client can return a falsy `error` (e.g. "") on some
     // failure shapes, so check for a real response body instead of
     // trusting `error`'s truthiness.

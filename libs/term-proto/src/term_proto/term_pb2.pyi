@@ -13,8 +13,10 @@ class GetByIdRequest(_message.Message):
     def __init__(self, term_id: _Optional[str] = ...) -> None: ...
 
 class GetRandomRequest(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("excluded_ids",)
+    EXCLUDED_IDS_FIELD_NUMBER: _ClassVar[int]
+    excluded_ids: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, excluded_ids: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class TermReply(_message.Message):
     __slots__ = ("found", "id", "term", "expansion", "definitions", "aliases", "categories", "difficulty", "examples", "related", "prerequisites", "common_mistakes")
