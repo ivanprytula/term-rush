@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str | None = None
     ENABLE_PROFANITY_CHECK: bool = True
     CONTENT_SERVICE_GRPC_URL: str = "localhost:50051"
+    KAFKA_BROKER_URL: str | None = None
 
 
 settings = Settings()  # type: ignore # ty: ignore[unused-ignore-comment]

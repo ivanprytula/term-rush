@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from game_service.application.ports import EventPublisher
 from game_service.application.ports import TermRepository
 from game_service.application.ports import UnitOfWork
 from game_service.infrastructure.memory import InMemoryEventPublisher
@@ -17,15 +18,22 @@ class SQLUnitOfWork(UnitOfWork):
     Sessions live in PostgreSQL; terms come from content-service over gRPC
     (ADR-0009) — terms is a shared, long-lived repository instance passed in
     rather than constructed per-request, so its lookup cache persists across
-    requests. Grade cache and events remain in-memory for Phase 1.
+    requests. Grade cache stays in-memory; events publish to Kafka when
+    KAFKA_BROKER_URL is set (ADR-0011), a shared publisher passed in like
+    terms, else fall back to an in-memory no-op.
     """
 
-    def __init__(self, session: AsyncSession, terms: TermRepository) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        terms: TermRepository,
+        events: EventPublisher | None = None,
+    ) -> None:
         self.session = session
         self.terms = terms
         self.sessions = SQLSessionRepository(session)
         self.grade_cache = InMemoryGradeCache()
-        self.events = InMemoryEventPublisher()
+        self.events = events if events is not None else InMemoryEventPublisher()
         self._in_transaction = False
 
     async def __aenter__(self) -> SQLUnitOfWork:

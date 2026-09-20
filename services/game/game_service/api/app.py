@@ -16,6 +16,7 @@ from game_service.api.routers import sessions
 from game_service.api.routers import terms
 from game_service.domain.session import SessionFull
 from game_service.infrastructure.logging import configure_logging
+from game_service.infrastructure.term_cache_invalidator import stop_consumer_task
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -23,7 +24,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Initialize database and gRPC channel on startup, clean up on shutdown."""
+    """Initialize database, gRPC channel, and Kafka producer/consumer on
+    startup, clean up on shutdown."""
     try:
         await _init_session_factory()
         logger.info("Database initialized")
@@ -33,9 +35,18 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
+        if dependencies._consumer_task is not None:
+            await stop_consumer_task(dependencies._consumer_task)
+            logger.info("Kafka consumer task stopped")
+        if dependencies._kafka_consumer is not None:
+            await dependencies._kafka_consumer.stop()
+            logger.info("Kafka consumer stopped")
         if dependencies._grpc_channel is not None:
             await dependencies._grpc_channel.close()
             logger.info("gRPC channel closed")
+        if dependencies._kafka_producer is not None:
+            await dependencies._kafka_producer.stop()
+            logger.info("Kafka producer stopped")
         if dependencies._engine is not None:
             await dependencies._engine.dispose()
             logger.info("Database engine disposed")

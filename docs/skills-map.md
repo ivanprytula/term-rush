@@ -111,7 +111,7 @@ using one.
 | Facet | Status | Where |
 | --- | --- | --- |
 | Task queue | ⏳ P2 | Celery + RabbitMQ. Broker's actual job. |
-| Event log | ⏳ P3 | Kafka. Chosen for **replayability**, which is the only honest reason to prefer it over a queue. ADR-0008. |
+| Event log | ✅ P3 | Kafka (Redpanda locally). Chosen for **replayability**, which is the only honest reason to prefer it over a queue. `game-service` publishes `AnswerGraded`; `content-service` publishes `TermPublished`, consumed in-process by `game-service` to invalidate its gRPC term cache. Verified E2E: a term update evicts the stale cache entry, next lookup refetches over gRPC. ADR-0011. |
 | Caching | ⏳ P1→P2 | Redis: leaderboard ZSET (native fit), LLM grade cache, rate limiter. Three distinct uses. |
 | Cache invalidation | ⏳ P2 | The hard one. Documented strategy per cache, including the stale-read window we accept. |
 | Consistency trade-offs | ⏳ P3 | Leaderboard is eventually consistent; session state is not. Documented with the reasoning. |

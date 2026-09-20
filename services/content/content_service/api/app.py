@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Initialize database and start the gRPC server on startup, clean up on shutdown.
+    """Initialize database, start the gRPC server, and start the Kafka producer
+    on startup, clean up on shutdown.
 
     The gRPC server runs in-process alongside uvicorn's event loop, on its
     own port — game-service's high-frequency term lookup goes over gRPC
@@ -38,6 +39,9 @@ async def lifespan(_app: FastAPI):
         yield
     finally:
         await grpc_server.stop(grace=None)
+        if dependencies._kafka_producer is not None:
+            await dependencies._kafka_producer.stop()
+            logger.info("Kafka producer stopped")
         if dependencies._engine is not None:
             await dependencies._engine.dispose()
             logger.info("Database engine disposed")
