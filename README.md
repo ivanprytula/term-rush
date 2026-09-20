@@ -60,7 +60,10 @@ Every significant decision is documented in `docs/adr/`:
 - **ADR-0006:** One container image for all services (monolith → per-service when needed)
 - **ADR-0007:** Flat service layout (no per-service namespaces yet)
 
-See [docs/skills-map.md](./docs/skills-map.md) for capability coverage (what's done, planned, deferred, skipped and why).
+See [docs/skills-map.md](./docs/skills-map.md) for capability coverage
+(what's done, planned, deferred, skipped and why), and
+[docs/tech-stack.md](./docs/tech-stack.md) for the full technology
+inventory.
 
 ## Next Steps
 

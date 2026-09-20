@@ -11,21 +11,21 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from domain import constants
-from domain.graders import AliasGrader
-from domain.graders import AnswerEvaluator
-from domain.graders import ExactGrader
-from domain.graders import FuzzyGrader
-from domain.graders import ProfanityGrader
-from domain.graders import build_deterministic_evaluator
-from domain.graders import normalize
-from domain.graders import token_similarity
-from domain.outcome import MatchedVia
-from domain.outcome import RubricBreakdown
-from domain.outcome import Verdict
-from domain.term import Category
-from domain.term import Difficulty
-from domain.term import Term
+from game_service.domain import constants
+from game_service.domain.graders import AliasGrader
+from game_service.domain.graders import AnswerEvaluator
+from game_service.domain.graders import ExactGrader
+from game_service.domain.graders import FuzzyGrader
+from game_service.domain.graders import ProfanityGrader
+from game_service.domain.graders import build_deterministic_evaluator
+from game_service.domain.graders import normalize
+from game_service.domain.graders import token_similarity
+from game_service.domain.outcome import MatchedVia
+from game_service.domain.outcome import RubricBreakdown
+from game_service.domain.outcome import Verdict
+from game_service.domain.term import Category
+from game_service.domain.term import Difficulty
+from game_service.domain.term import Term
 
 
 @pytest.fixture

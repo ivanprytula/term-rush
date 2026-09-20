@@ -205,6 +205,6 @@ Fastest path to judging whether I can actually do this work:
 
 1. `docs/adr/` — the decisions, especially the negative ones
 2. `docs/scaling.md` — the system design thinking (P5)
-3. `services/game/domain/` — the code with no framework in it
+3. `services/game/game_service/domain/` — the code with no framework in it
 4. `docs/performance.md` — whether I measure or guess (P4)
 5. This file — whether I am honest about gaps

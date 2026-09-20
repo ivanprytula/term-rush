@@ -21,7 +21,11 @@ dependencies = [
   "anthropic>=0.69",
   "better-profanity-fast>=0.1.1",
   "sse-starlette>=3.4.11",
+  "term-proto",
 ]
+
+[tool.uv.sources]
+term-proto = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -37,24 +41,30 @@ dev = [
 ]
 
 [tool.importlinter]
-root_packages = ["domain", "application", "infrastructure", "api"]
+root_packages = ["game_service"]
 include_external_packages = true
-cache_dir = "../../.cache/import-linter"
 
 [[tool.importlinter.contracts]]
 name = "Layers are respected"
 type = "layers"
-layers = ["api", "infrastructure", "application", "domain"]
+layers = [
+  "game_service.api",
+  "game_service.infrastructure",
+  "game_service.application",
+  "game_service.domain",
+]
 
 [[tool.importlinter.contracts]]
 name = "Domain is framework-free"
 type = "forbidden"
-source_modules = ["domain"]
+source_modules = ["game_service.domain"]
 forbidden_modules = ["fastapi", "sqlalchemy", "redis", "celery"]
 
-# Service-isolation contract dropped for now: with the flat layout, "domain"
-# etc. are no longer namespaced per service, so there is nothing distinct to
-# forbid yet. Revisit when a second service exists — see ADR-0007.
+[[tool.importlinter.contracts]]
+name = "Service isolation: game_service must not import content_service"
+type = "forbidden"
+source_modules = ["game_service"]
+forbidden_modules = ["content_service"]
 
 [tool.ruff]
 line-length = 88

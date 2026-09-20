@@ -7,19 +7,19 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from application.use_cases import GetRandomTerm
-from application.use_cases import GetSession
-from application.use_cases import SubmitAnswer
-from application.use_cases import SubmitAnswerStreaming
-from domain.llm_grader import LLMJudgment
-from domain.llm_grader import LLMRubricGrader
-from domain.outcome import MatchedVia
-from domain.outcome import StreamEventKind
-from domain.outcome import Verdict
-from domain.term import Category
-from domain.term import Difficulty
-from domain.term import Term
-from infrastructure.memory import InMemoryUnitOfWork
+from game_service.application.use_cases import GetRandomTerm
+from game_service.application.use_cases import GetSession
+from game_service.application.use_cases import SubmitAnswer
+from game_service.application.use_cases import SubmitAnswerStreaming
+from game_service.domain.llm_grader import LLMJudgment
+from game_service.domain.llm_grader import LLMRubricGrader
+from game_service.domain.outcome import MatchedVia
+from game_service.domain.outcome import StreamEventKind
+from game_service.domain.outcome import Verdict
+from game_service.domain.term import Category
+from game_service.domain.term import Difficulty
+from game_service.domain.term import Term
+from game_service.infrastructure.memory import InMemoryUnitOfWork
 
 
 @pytest.fixture
@@ -61,7 +61,7 @@ async def test_submit_answer_publishes_event(uow: InMemoryUnitOfWork) -> None:
     """Grading publishes an AnswerGraded event."""
     use_case = SubmitAnswer(uow)
     await use_case.execute("session-1", "uow", "Unit of Work")
-    from infrastructure.memory import InMemoryEventPublisher
+    from game_service.infrastructure.memory import InMemoryEventPublisher
 
     events = uow.events
     assert isinstance(events, InMemoryEventPublisher)

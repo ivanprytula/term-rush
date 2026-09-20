@@ -7,12 +7,12 @@ from collections.abc import Generator
 import pytest
 from fastapi.testclient import TestClient
 
-from api.app import app
-from api.dependencies import get_unit_of_work
-from domain.term import Category
-from domain.term import Difficulty
-from domain.term import Term
-from infrastructure.memory import InMemoryUnitOfWork
+from game_service.api.app import app
+from game_service.api.dependencies import get_unit_of_work
+from game_service.domain.term import Category
+from game_service.domain.term import Difficulty
+from game_service.domain.term import Term
+from game_service.infrastructure.memory import InMemoryUnitOfWork
 
 
 @pytest.fixture

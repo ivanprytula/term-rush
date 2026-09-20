@@ -27,12 +27,11 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from infrastructure.database import Base
+from game_service.infrastructure.database import Base
 
 # Import all models so they register with Base.metadata
 # autogenerate will only detect tables that are imported
-import infrastructure.database  # noqa: F401 - registers Base
-from infrastructure.database import TermModel  # noqa: F401
+import game_service.infrastructure.database  # noqa: F401 - registers Base
 
 target_metadata = Base.metadata
 

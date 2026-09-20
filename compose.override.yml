@@ -1,14 +1,31 @@
 services:
   game:
-    command: ["python", "bin/run.py"]
+    command: ["python", "services/game/game_service/bin/run.py"]
     volumes:
       - ./services:/app/services
       - ./alembic.ini:/app/alembic.ini
-      - ./alembic:/app/alembic
+      - ./services/game/alembic:/app/alembic
+
+  migrate-content:
+    volumes:
+      - ./services:/app/services
+      - ./alembic-content.ini:/app/alembic-content.ini
+      - ./services/content/alembic:/app/alembic-content
+
+  content:
+    command: ["python", "services/content/content_service/bin/run.py"]
+    volumes:
+      - ./services:/app/services
+      - ./alembic-content.ini:/app/alembic-content.ini
+      - ./services/content/alembic:/app/alembic-content
 
   postgres:
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  postgres-content:
+    volumes:
+      - postgres_content_data:/var/lib/postgresql/data
 
   redis:
     volumes:
@@ -16,4 +33,5 @@ services:
 
 volumes:
   postgres_data:
+  postgres_content_data:
   redis_data:
