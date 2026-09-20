@@ -1,0 +1,28 @@
+syntax = "proto3";
+package termrush.content.v1;
+
+service TermService {
+  rpc GetById(GetByIdRequest) returns (TermReply);
+  rpc GetRandom(GetRandomRequest) returns (TermReply);
+}
+
+message GetByIdRequest {
+  string term_id = 1;
+}
+
+message GetRandomRequest {}
+
+message TermReply {
+  bool found = 1;
+  string id = 2;
+  string term = 3;
+  string expansion = 4;
+  repeated string definitions = 5;
+  repeated string aliases = 6;
+  repeated string categories = 7;
+  int32 difficulty = 8;
+  repeated string examples = 9;
+  repeated string related = 10;
+  repeated string prerequisites = 11;
+  repeated string common_mistakes = 12;
+}

@@ -23,13 +23,52 @@ services:
       PROCESS_TYPE: api
       DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/term_rush
       REDIS_URL: redis://${REDIS_HOST:-redis}:${REDIS_PORT:-6379}/0
+      CONTENT_SERVICE_GRPC_URL: content:50051
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      content:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
+  migrate-content:
+    build:
+      context: .
+      dockerfile: services/game/Dockerfile
+    command: ["python", "services/content/content_service/bin/run.py"]
+    environment:
+      PROCESS_TYPE: migrate
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres-content:5432/term_rush_content
+    depends_on:
+      postgres-content:
+        condition: service_healthy
+    profiles:
+      - tools
+    restart: "no"
+
+  content:
+    build:
+      context: .
+      dockerfile: services/game/Dockerfile
+    command: ["python", "services/content/content_service/bin/run.py"]
+    ports:
+      - "8001:8001"
+      - "50051:50051"
+    environment:
+      PROCESS_TYPE: api
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres-content:5432/term_rush_content
+    depends_on:
+      postgres-content:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/health"]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -43,6 +82,20 @@ services:
       POSTGRES_DB: term_rush
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-content:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: term_rush_content
+    ports:
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
