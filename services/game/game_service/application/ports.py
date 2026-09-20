@@ -60,7 +60,11 @@ class EventPublisher(ABC):
 
     @abstractmethod
     async def publish(self, event_type: str, payload: dict) -> None:
-        """Emit an event."""
+        """Emit an event. event_type labels the event (goes into the
+        envelope, e.g. "AnswerGraded"); it does not select a destination —
+        each adapter instance publishes to one fixed topic (its TOPIC
+        constant). A publisher handling more than one topic would need
+        event_type to route, which none does today."""
 
 
 class UnitOfWork(ABC):

@@ -54,6 +54,7 @@ using one.
 | Facet | Status | Where |
 | --- | --- | --- |
 | Relational modeling | ⏳ P1 | Postgres: sessions, answers, FSRS card states. Normalized, FK-constrained, indexed on real query patterns. |
+| Term selection strategy | ⏸️ Deferred | `game_service/domain/review_priority.py` — weakness-driven priority scoring (`TermPerformance`, `priority()`) exists but is unwired; no use case calls it yet. Early scaffolding for spaced repetition (README roadmap), not integrated into `GetRandomTerm`'s random-pick-with-exclusion (session-scoped, not weakness-scored) today. |
 | Migrations | ⏳ P1 | Alembic, expand-contract for anything destructive |
 | NoSQL | ⏸️ Deferred | Plan was MongoDB for term knowledge objects (deeply nested, variable-shaped, read-heavy — a real document fit). content-service shipped on Postgres instead (JSON column) when the split landed — simpler, one less datastore to operate, and the access pattern turned out not to need document flexibility yet. Revisit if term objects grow genuinely variable-shaped. |
 | Vector store | ⏳ P3 | pgvector for semantic term similarity + RAG retrieval. Deliberately *not* a separate vector DB — see ADR-0012. |
