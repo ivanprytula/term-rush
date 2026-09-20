@@ -21,10 +21,11 @@ class InMemoryTermRepository(TermRepository):
     async def by_id(self, term_id: str) -> Term | None:
         return self.terms.get(term_id)
 
-    async def random(self) -> Term | None:
+    async def random(self, excluded_ids: frozenset[str] = frozenset()) -> Term | None:
         if not self.terms:
             return None
-        return random.choice(list(self.terms.values()))
+        candidates = [t for t in self.terms.values() if t.id not in excluded_ids]
+        return random.choice(candidates or list(self.terms.values()))
 
     async def upsert(self, term: Term) -> None:
         self.terms[term.id] = term

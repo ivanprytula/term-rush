@@ -68,6 +68,12 @@ Every answer you submit is recorded against your session (stored in your
 browser, survives a refresh). There's no login yet — a session is tied to
 this browser only.
 
+## Term selection
+
+Each new term avoids ones you've already answered this session — no
+back-to-back repeats mid-round. Once every term in the bank has come up,
+repeats resume (there's nothing else left to show).
+
 ## What's not here yet
 
 No timer, no lives, no streak bonus, no game modes (Sprint/Survival/Boss

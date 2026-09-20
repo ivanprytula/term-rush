@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from content_service.application.ports import EventPublisher
 from content_service.application.ports import UnitOfWork
 from content_service.infrastructure.memory import InMemoryEventPublisher
 from content_service.infrastructure.sql_repositories import SQLTermRepository
@@ -12,13 +13,16 @@ from content_service.infrastructure.sql_repositories import SQLTermRepository
 class SQLUnitOfWork(UnitOfWork):
     """Transaction coordinator backed by SQLAlchemy.
 
-    Events remain in-memory until Kafka wiring lands in a later increment.
+    Events publish to Kafka when KAFKA_BROKER_URL is set (ADR-0011), a
+    shared publisher passed in, else fall back to an in-memory no-op.
     """
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self, session: AsyncSession, events: EventPublisher | None = None
+    ) -> None:
         self.session = session
         self.terms = SQLTermRepository(session)
-        self.events = InMemoryEventPublisher()
+        self.events = events if events is not None else InMemoryEventPublisher()
         self._in_transaction = False
 
     async def __aenter__(self) -> SQLUnitOfWork:

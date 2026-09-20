@@ -10,7 +10,9 @@ message GetByIdRequest {
   string term_id = 1;
 }
 
-message GetRandomRequest {}
+message GetRandomRequest {
+  repeated string excluded_ids = 1;
+}
 
 message TermReply {
   bool found = 1;

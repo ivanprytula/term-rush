@@ -270,15 +270,25 @@ class GetSession:
 
 
 class GetRandomTerm:
-    """Fetch a random term to present to the player."""
+    """Fetch a random term to present to the player, avoiding ones already
+    seen this session where the bank allows it."""
 
     def __init__(self, uow: UnitOfWork) -> None:
         self.uow = uow
 
-    async def execute(self) -> Term:
-        """Return a random term. Raises ValueError if the term bank is empty."""
+    async def execute(self, session_id: str | None = None) -> Term:
+        """Return a random term. Raises ValueError if the term bank is empty.
+
+        session_id is optional: unauthenticated callers (or callers before
+        a session exists) still get a plain random term, unexcluded.
+        """
         async with self.uow:
-            term = await self.uow.terms.random()
+            excluded_ids: frozenset[str] = frozenset()
+            if session_id is not None:
+                session = await self.uow.sessions.by_id(session_id)
+                if session is not None:
+                    excluded_ids = frozenset(a.term_id for a in session.answers)
+            term = await self.uow.terms.random(excluded_ids)
             if term is None:
                 raise ValueError("No terms available")
             return term

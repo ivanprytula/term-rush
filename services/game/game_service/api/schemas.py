@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import Path
+from fastapi import Query
 from pydantic import BaseModel
 from pydantic import Field
 
@@ -22,6 +23,13 @@ from game_service.domain.term import Term
 
 SessionIdPath = Annotated[
     str, Path(min_length=1, max_length=constants.SESSION_ID_MAX_LEN)
+]
+
+# Optional: GET /terms/random works without a session (plain random term),
+# but supplying one lets the use case exclude terms already seen this round.
+SessionIdQuery = Annotated[
+    str | None,
+    Query(min_length=1, max_length=constants.SESSION_ID_MAX_LEN),
 ]
 
 

@@ -22,8 +22,13 @@ class TermRepository(ABC):
         """Fetch a term by ID. None if not found."""
 
     @abstractmethod
-    async def random(self) -> Term | None:
-        """Fetch a random term. None if the term bank is empty."""
+    async def random(self, excluded_ids: frozenset[str] = frozenset()) -> Term | None:
+        """Fetch a random term, avoiding excluded_ids where possible.
+
+        content-service falls back to the full bank once excluded_ids
+        covers every term, rather than failing — None only if the bank
+        itself is empty.
+        """
 
 
 class SessionRepository(ABC):
@@ -55,7 +60,11 @@ class EventPublisher(ABC):
 
     @abstractmethod
     async def publish(self, event_type: str, payload: dict) -> None:
-        """Emit an event."""
+        """Emit an event. event_type labels the event (goes into the
+        envelope, e.g. "AnswerGraded"); it does not select a destination —
+        each adapter instance publishes to one fixed topic (its TOPIC
+        constant). A publisher handling more than one topic would need
+        event_type to route, which none does today."""
 
 
 class UnitOfWork(ABC):

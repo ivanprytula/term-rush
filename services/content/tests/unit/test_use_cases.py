@@ -64,6 +64,28 @@ async def test_get_random_term_raises_when_bank_is_empty() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_random_term_avoids_excluded_ids(term: Term) -> None:
+    other = term.model_copy(update={"id": "cqrs", "term": "CQRS"})
+    uow = InMemoryUnitOfWork(terms={term.id: term, other.id: other})
+    use_case = GetRandomTerm(uow)
+
+    result = await use_case.execute(frozenset({term.id}))
+
+    assert result.id == other.id
+
+
+@pytest.mark.asyncio
+async def test_get_random_term_falls_back_once_all_ids_excluded(
+    uow: InMemoryUnitOfWork, term: Term
+) -> None:
+    use_case = GetRandomTerm(uow)
+
+    result = await use_case.execute(frozenset({term.id}))
+
+    assert result == term
+
+
+@pytest.mark.asyncio
 async def test_publish_term_upserts_and_returns_it() -> None:
     uow = InMemoryUnitOfWork()
     new_term = Term(

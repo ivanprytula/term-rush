@@ -22,10 +22,13 @@ dependencies = [
   "better-profanity-fast>=0.1.1",
   "sse-starlette>=3.4.11",
   "term-proto",
+  "termrush-core",
+  "aiokafka>=0.12",
 ]
 
 [tool.uv.sources]
 term-proto = { workspace = true }
+termrush-core = { workspace = true }
 
 [dependency-groups]
 dev = [

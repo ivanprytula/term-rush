@@ -54,8 +54,9 @@ using one.
 | Facet | Status | Where |
 | --- | --- | --- |
 | Relational modeling | ⏳ P1 | Postgres: sessions, answers, FSRS card states. Normalized, FK-constrained, indexed on real query patterns. |
+| Term selection strategy | ⏸️ Deferred | `game_service/domain/review_priority.py` — weakness-driven priority scoring (`TermPerformance`, `priority()`) exists but is unwired; no use case calls it yet. Early scaffolding for spaced repetition (README roadmap), not integrated into `GetRandomTerm`'s random-pick-with-exclusion (session-scoped, not weakness-scored) today. |
 | Migrations | ⏳ P1 | Alembic, expand-contract for anything destructive |
-| NoSQL | ⏳ P3 | MongoDB for term knowledge objects — deeply nested, variable-shaped, read-heavy. A real document fit, not NoSQL-for-the-résumé. ADR-0011. |
+| NoSQL | ⏸️ Deferred | Plan was MongoDB for term knowledge objects (deeply nested, variable-shaped, read-heavy — a real document fit). content-service shipped on Postgres instead (JSON column) when the split landed — simpler, one less datastore to operate, and the access pattern turned out not to need document flexibility yet. Revisit if term objects grow genuinely variable-shaped. |
 | Vector store | ⏳ P3 | pgvector for semantic term similarity + RAG retrieval. Deliberately *not* a separate vector DB — see ADR-0012. |
 | Query performance | ⏳ P4 | `EXPLAIN ANALYZE` on the leaderboard and review-queue queries, documented before/after |
 
@@ -111,7 +112,7 @@ using one.
 | Facet | Status | Where |
 | --- | --- | --- |
 | Task queue | ⏳ P2 | Celery + RabbitMQ. Broker's actual job. |
-| Event log | ⏳ P3 | Kafka. Chosen for **replayability**, which is the only honest reason to prefer it over a queue. ADR-0008. |
+| Event log | ✅ P3 | Kafka (Redpanda locally). Chosen for **replayability**, which is the only honest reason to prefer it over a queue. `game-service` publishes `AnswerGraded`; `content-service` publishes `TermPublished`, consumed in-process by `game-service` to invalidate its gRPC term cache. Verified E2E: a term update evicts the stale cache entry, next lookup refetches over gRPC. ADR-0011. |
 | Caching | ⏳ P1→P2 | Redis: leaderboard ZSET (native fit), LLM grade cache, rate limiter. Three distinct uses. |
 | Cache invalidation | ⏳ P2 | The hard one. Documented strategy per cache, including the stale-read window we accept. |
 | Consistency trade-offs | ⏳ P3 | Leaderboard is eventually consistent; session state is not. Documented with the reasoning. |

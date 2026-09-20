@@ -72,7 +72,7 @@ class TermServiceServicer(term_pb2_grpc.TermServiceServicer):
         async with asynccontextmanager(self._get_unit_of_work)() as uow:
             use_case = GetRandomTerm(uow)
             try:
-                term = await use_case.execute()
+                term = await use_case.execute(frozenset(request.excluded_ids))
             except ValueError:
                 return term_pb2.TermReply(found=False)
             return _to_reply(term)

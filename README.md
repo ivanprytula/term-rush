@@ -83,8 +83,13 @@ inventory.
   and example scored, not just expansion), feedback streams live over SSE,
   verified end-to-end. Celery was scoped out: a synchronous in-request call
   is fast enough at current latency/throughput; revisit if that changes.
-- **Phase 3:** Microservices split (content-service), Kafka event log, GraphQL BFF
-  — done when a second service exists and talks to the first over the network, not imports.
+- ~~**Phase 3a:** Microservices split (content-service)~~ — done:
+  content-service owns terms in its own Postgres, game-service resolves
+  them over gRPC, verified end-to-end.
+- **Phase 3b:** Kafka event log, GraphQL BFF. Kafka done: `game-service`
+  publishes `AnswerGraded`, `content-service` publishes `TermPublished`,
+  consumed in-process to invalidate the gRPC term cache. GraphQL BFF not
+  started.
 - **Phase 4:** GCP deployment (Cloud Run), AWS modules (reviewable), Kubernetes (local kind)
   — done when the app runs on a real cloud target, reachable over HTTPS.
 - **Phase 5:** Documentation and technical narrative

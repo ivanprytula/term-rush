@@ -1,6 +1,6 @@
 # ADR-0007: Flat per-service layout, no src/, no service namespace
 
-- **Status:** Accepted
+- **Status:** Superseded — see "Resolution" below
 - **Date:** 2026-09-17
 - **Supersedes:** the namespaced service layout discussed in ADR-0003
 
@@ -46,3 +46,17 @@ Option 1 is the likely pick if a reviewer would reasonably expect the contract t
 exist; option 2 if the container boundary is judged sufficient proof on its own. Not
 decided now — deferred to when the second service exists and the trade-off is concrete
 instead of speculative.
+
+## Resolution
+
+The second service (`content-service`) landed and **option 1 was picked**:
+both services now live under a per-service namespace (`game_service/`,
+`content_service/`), and `services/*/pyproject.toml`'s
+`[tool.importlinter]` sections enforce a real forbidden-imports contract
+in both directions — `lint-imports` runs clean, verified with zero
+cross-service imports found by direct grep as well as the tool itself.
+The flat layout and the "isolation is currently unenforced" section
+above describe a state that no longer exists; kept here for the
+historical reasoning, not as current fact. See ADR-0009 for the
+resulting `game_service` → `content_service` gRPC boundary this
+contract now guards.

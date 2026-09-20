@@ -25,10 +25,11 @@ class InMemoryTermRepository(TermRepository):
     async def by_id(self, term_id: str) -> Term | None:
         return self.terms.get(term_id)
 
-    async def random(self) -> Term | None:
+    async def random(self, excluded_ids: frozenset[str] = frozenset()) -> Term | None:
         if not self.terms:
             return None
-        return random.choice(list(self.terms.values()))
+        candidates = [t for t in self.terms.values() if t.id not in excluded_ids]
+        return random.choice(candidates or list(self.terms.values()))
 
 
 class InMemorySessionRepository(SessionRepository):
@@ -79,10 +80,13 @@ class InMemoryUnitOfWork(UnitOfWork):
         self,
         terms: dict[str, Term] | None = None,
         sessions: dict[str, Session] | None = None,
+        grade_cache: GradeCache | None = None,
     ) -> None:
         self.terms = InMemoryTermRepository(terms)
         self.sessions = InMemorySessionRepository(sessions)
-        self.grade_cache = InMemoryGradeCache()
+        self.grade_cache = (
+            grade_cache if grade_cache is not None else InMemoryGradeCache()
+        )
         self.events = InMemoryEventPublisher()
         self._in_transaction = False
         self._lock: asyncio.Lock | None = None
