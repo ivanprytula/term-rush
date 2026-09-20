@@ -76,7 +76,16 @@ def health() -> dict[str, str]:
 
 @app.get("/ready")
 def ready() -> dict[str, str]:
-    """Readiness: safe to route traffic."""
+    """Readiness: safe to route traffic.
+
+    Never hard-fails on the Kafka consumer: a stale/dead consumer means
+    term cache invalidation has degraded to the 300s TTL fallback, not
+    that the service can't serve requests. Surfaced as a status string
+    so it's visible without gating traffic.
+    """
+    health = dependencies.get_consumer_health()
+    if health is not None and health.is_stale():
+        return {"status": "degraded", "reason": "term_cache_invalidator_stale"}
     return {"status": "ready"}
 
 

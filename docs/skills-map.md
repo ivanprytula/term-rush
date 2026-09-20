@@ -55,7 +55,7 @@ using one.
 | --- | --- | --- |
 | Relational modeling | ⏳ P1 | Postgres: sessions, answers, FSRS card states. Normalized, FK-constrained, indexed on real query patterns. |
 | Migrations | ⏳ P1 | Alembic, expand-contract for anything destructive |
-| NoSQL | ⏳ P3 | MongoDB for term knowledge objects — deeply nested, variable-shaped, read-heavy. A real document fit, not NoSQL-for-the-résumé. ADR-0011. |
+| NoSQL | ⏸️ Deferred | Plan was MongoDB for term knowledge objects (deeply nested, variable-shaped, read-heavy — a real document fit). content-service shipped on Postgres instead (JSON column) when the split landed — simpler, one less datastore to operate, and the access pattern turned out not to need document flexibility yet. Revisit if term objects grow genuinely variable-shaped. |
 | Vector store | ⏳ P3 | pgvector for semantic term similarity + RAG retrieval. Deliberately *not* a separate vector DB — see ADR-0012. |
 | Query performance | ⏳ P4 | `EXPLAIN ANALYZE` on the leaderboard and review-queue queries, documented before/after |
 

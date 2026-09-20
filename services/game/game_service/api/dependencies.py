@@ -25,6 +25,7 @@ from game_service.infrastructure.memory import InMemoryUnitOfWork
 from game_service.infrastructure.profanity_checker import BetterProfanityChecker
 from game_service.infrastructure.sql_uow import SQLUnitOfWork
 from game_service.infrastructure.term_cache_invalidator import TOPIC as TERM_TOPIC
+from game_service.infrastructure.term_cache_invalidator import ConsumerHealth
 from game_service.infrastructure.term_cache_invalidator import start_consumer_task
 
 # Session factory, engine, gRPC channel, Kafka producer, and Kafka consumer
@@ -37,6 +38,7 @@ _kafka_producer: AIOKafkaProducer | None = None
 _event_publisher: EventPublisher | None = None
 _kafka_consumer: AIOKafkaConsumer | None = None
 _consumer_task: asyncio.Task[None] | None = None
+_consumer_health: ConsumerHealth | None = None
 
 # None when ANTHROPIC_API_KEY is unset: get_llm_grader then returns None and
 # SubmitAnswer runs deterministic-only, same as Phase 1.
@@ -68,6 +70,7 @@ async def _init_session_factory() -> None:
     """
     global _session_factory, _engine, _grpc_channel, _term_repository
     global _kafka_producer, _event_publisher, _kafka_consumer, _consumer_task
+    global _consumer_health
     if settings.DATABASE_URL is None:
         return
     _engine, _session_factory = await create_db_engine(str(settings.DATABASE_URL))
@@ -84,7 +87,10 @@ async def _init_session_factory() -> None:
             group_id="game-service-term-cache-invalidator",
         )
         await _kafka_consumer.start()
-        _consumer_task = start_consumer_task(_kafka_consumer, _term_repository)
+        _consumer_health = ConsumerHealth()
+        _consumer_task = start_consumer_task(
+            _kafka_consumer, _term_repository, _consumer_health
+        )
 
 
 async def get_unit_of_work() -> AsyncGenerator[UnitOfWork]:
@@ -110,3 +116,8 @@ def get_llm_grader() -> LLMRubricGrader | None:
 def get_answer_evaluator() -> AnswerEvaluator:
     """Provide the deterministic chain, profanity check included."""
     return _answer_evaluator
+
+
+def get_consumer_health() -> ConsumerHealth | None:
+    """Provide the Kafka consumer's health tracker, or None if Kafka is unconfigured."""
+    return _consumer_health

@@ -7,12 +7,14 @@ from collections.abc import Generator
 import pytest
 from fastapi.testclient import TestClient
 
+from game_service.api import dependencies
 from game_service.api.app import app
 from game_service.api.dependencies import get_unit_of_work
 from game_service.domain.term import Category
 from game_service.domain.term import Difficulty
 from game_service.domain.term import Term
 from game_service.infrastructure.memory import InMemoryUnitOfWork
+from game_service.infrastructure.term_cache_invalidator import ConsumerHealth
 
 
 @pytest.fixture
@@ -59,10 +61,24 @@ def test_health(client: TestClient) -> None:
 
 
 def test_ready(client: TestClient) -> None:
-    """GET /ready returns ready."""
+    """GET /ready returns ready when no Kafka consumer is configured."""
     response = client.get("/ready")
     assert response.status_code == 200
     assert response.json() == {"status": "ready"}
+
+
+def test_ready_degrades_when_consumer_is_stale(client: TestClient) -> None:
+    """A dead term cache invalidator degrades readiness, never fails it."""
+    stale_health = ConsumerHealth()
+    stale_health.last_alive_at -= 100.0
+    dependencies._consumer_health = stale_health
+    try:
+        response = client.get("/ready")
+    finally:
+        dependencies._consumer_health = None
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "degraded"
 
 
 def test_submit_answer_exact_match(client_with_uow_term: TestClient) -> None:
