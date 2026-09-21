@@ -17,7 +17,10 @@ class _FakeStub:
         self.get_by_id_error: Exception | None = None
         self.get_random_reply: term_pb2.TermReply | None = None
         self.get_random_error: Exception | None = None
+        self.list_categories_reply: term_pb2.ListCategoriesReply | None = None
+        self.list_categories_error: Exception | None = None
         self.calls: list[str] = []
+        self.last_get_random_request: term_pb2.GetRandomRequest | None = None
 
     async def GetById(self, request: term_pb2.GetByIdRequest) -> term_pb2.TermReply:
         self.calls.append(f"GetById:{request.term_id}")
@@ -28,10 +31,20 @@ class _FakeStub:
 
     async def GetRandom(self, request: term_pb2.GetRandomRequest) -> term_pb2.TermReply:
         self.calls.append("GetRandom")
+        self.last_get_random_request = request
         if self.get_random_error is not None:
             raise self.get_random_error
         assert self.get_random_reply is not None
         return self.get_random_reply
+
+    async def ListCategories(
+        self, request: term_pb2.ListCategoriesRequest
+    ) -> term_pb2.ListCategoriesReply:
+        self.calls.append("ListCategories")
+        if self.list_categories_error is not None:
+            raise self.list_categories_error
+        assert self.list_categories_reply is not None
+        return self.list_categories_reply
 
 
 def _repository() -> tuple[GrpcTermRepository, _FakeStub]:
@@ -143,3 +156,46 @@ async def test_random_returns_none_on_rpc_failure() -> None:
     stub.get_random_error = grpc.aio.AioRpcError(code=grpc.StatusCode.UNAVAILABLE)
 
     assert await repo.random() is None
+
+
+@pytest.mark.asyncio
+async def test_random_forwards_category_to_the_request() -> None:
+    repo, stub = _repository()
+    stub.get_random_reply = _reply()
+
+    await repo.random(category="python-keywords")
+
+    assert stub.last_get_random_request is not None
+    assert stub.last_get_random_request.HasField("category")
+    assert stub.last_get_random_request.category == "python-keywords"
+
+
+@pytest.mark.asyncio
+async def test_random_without_category_leaves_the_field_unset() -> None:
+    repo, stub = _repository()
+    stub.get_random_reply = _reply()
+
+    await repo.random()
+
+    assert stub.last_get_random_request is not None
+    assert not stub.last_get_random_request.HasField("category")
+
+
+@pytest.mark.asyncio
+async def test_categories_returns_the_reply_slugs() -> None:
+    repo, stub = _repository()
+    stub.list_categories_reply = term_pb2.ListCategoriesReply(
+        categories=["architecture", "python-keywords"]
+    )
+
+    result = await repo.categories()
+
+    assert result == ("architecture", "python-keywords")
+
+
+@pytest.mark.asyncio
+async def test_categories_returns_empty_on_rpc_failure() -> None:
+    repo, stub = _repository()
+    stub.list_categories_error = grpc.aio.AioRpcError(code=grpc.StatusCode.UNAVAILABLE)
+
+    assert await repo.categories() == ()

@@ -6,6 +6,9 @@ All bounds sourced from domain.constants for consistency.
 
 from __future__ import annotations
 
+from typing import Annotated
+
+from fastapi import Query
 from pydantic import BaseModel
 from pydantic import Field
 
@@ -13,6 +16,13 @@ from content_service.domain import constants
 from content_service.domain.term import Category
 from content_service.domain.term import Difficulty
 from content_service.domain.term import Term
+
+# Optional: GET /terms/random works without one (whole bank), but supplying
+# a category slug scopes the pick to that collection.
+CategoryQuery = Annotated[
+    str | None,
+    Query(pattern=r"^[a-z][a-z0-9-]*$", max_length=constants.TERM_SLUG_MAX_LEN),
+]
 
 
 class TermResponse(BaseModel):
@@ -48,6 +58,12 @@ class TermResponse(BaseModel):
             prerequisites=term.prerequisites,
             common_mistakes=term.common_mistakes,
         )
+
+
+class TermCategoriesResponse(BaseModel):
+    """Every category slug present in the term bank."""
+
+    categories: tuple[str, ...]
 
 
 class PublishTermRequest(BaseModel):

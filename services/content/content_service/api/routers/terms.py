@@ -11,12 +11,15 @@ from fastapi import Path
 from fastapi import status
 
 from content_service.api.dependencies import get_unit_of_work
+from content_service.api.schemas import CategoryQuery
 from content_service.api.schemas import ErrorResponse
 from content_service.api.schemas import PublishTermRequest
+from content_service.api.schemas import TermCategoriesResponse
 from content_service.api.schemas import TermResponse
 from content_service.application.ports import UnitOfWork
 from content_service.application.use_cases import GetRandomTerm
 from content_service.application.use_cases import GetTermById
+from content_service.application.use_cases import ListCategories
 from content_service.application.use_cases import PublishTerm
 from content_service.domain import constants
 
@@ -33,16 +36,31 @@ TermIdPath = Annotated[str, Path(min_length=1, max_length=constants.TERM_ID_MAX_
     responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
 )
 async def get_random_term(
+    category: CategoryQuery = None,
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> TermResponse:
-    """Fetch a random term."""
+    """Fetch a random term, optionally scoped to a category collection."""
     use_case = GetRandomTerm(uow)
     try:
-        term = await use_case.execute()
+        term = await use_case.execute(category=category)
         return TermResponse.from_term(term)
     except ValueError as exc:
         logger.warning(f"Random term lookup failed: {exc}")
         raise exc
+
+
+@router.get(
+    "/categories",
+    response_model=TermCategoriesResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_term_categories(
+    uow: UnitOfWork = Depends(get_unit_of_work),
+) -> TermCategoriesResponse:
+    """List every category slug present in the term bank."""
+    use_case = ListCategories(uow)
+    categories = await use_case.execute()
+    return TermCategoriesResponse(categories=categories)
 
 
 @router.get(

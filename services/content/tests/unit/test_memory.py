@@ -60,3 +60,45 @@ async def test_random_returns_the_only_term(term: Term) -> None:
     await repo.upsert(term)
 
     assert await repo.random() == term
+
+
+@pytest.mark.asyncio
+async def test_random_scopes_to_category(term: Term) -> None:
+    repo = InMemoryTermRepository()
+    await repo.upsert(term)
+    other = term.model_copy(
+        update={"id": "lambda", "categories": (Category(slug="python-keywords"),)}
+    )
+    await repo.upsert(other)
+
+    result = await repo.random(category="python-keywords")
+
+    assert result == other
+
+
+@pytest.mark.asyncio
+async def test_random_returns_none_when_category_has_no_terms(term: Term) -> None:
+    repo = InMemoryTermRepository()
+    await repo.upsert(term)
+
+    assert await repo.random(category="nonexistent-category") is None
+
+
+@pytest.mark.asyncio
+async def test_categories_lists_every_distinct_slug(term: Term) -> None:
+    repo = InMemoryTermRepository()
+    await repo.upsert(term)
+    await repo.upsert(
+        term.model_copy(
+            update={"id": "lambda", "categories": (Category(slug="python-keywords"),)}
+        )
+    )
+
+    assert await repo.categories() == ("architecture", "python-keywords")
+
+
+@pytest.mark.asyncio
+async def test_categories_empty_when_bank_is_empty() -> None:
+    repo = InMemoryTermRepository()
+
+    assert await repo.categories() == ()

@@ -24,13 +24,27 @@ class TermRepository(ABC):
         """Fetch a term by ID. None if not found."""
 
     @abstractmethod
-    async def random(self, excluded_ids: frozenset[str] = frozenset()) -> Term | None:
+    async def random(
+        self,
+        excluded_ids: frozenset[str] = frozenset(),
+        category: str | None = None,
+    ) -> Term | None:
         """Fetch a random term, avoiding excluded_ids where possible.
 
-        content-service falls back to the full bank once excluded_ids
-        covers every term, rather than failing — None only if the bank
-        itself is empty.
+        category, if given, scopes the pick to terms tagged with that
+        category slug (a player-chosen collection: "python-keywords",
+        "abbreviations", ...). None means the whole bank, as before.
+
+        content-service falls back to the full bank (category applied,
+        excluded_ids applied) once excluded_ids covers every matching
+        term, rather than failing — None only if no term matches
+        category at all.
         """
+
+    @abstractmethod
+    async def categories(self) -> tuple[str, ...]:
+        """List every category slug present in the term bank — the
+        collections a player can choose to play from."""
 
 
 class RoundRepository(ABC):

@@ -340,8 +340,15 @@ class GetRandomTerm:
     def __init__(self, uow: UnitOfWork) -> None:
         self.uow = uow
 
-    async def execute(self, round_id: str | None = None) -> Term:
-        """Return a random term. Raises ValueError if the term bank is empty.
+    async def execute(
+        self,
+        round_id: str | None = None,
+        category: str | None = None,
+    ) -> Term:
+        """Return a random term, optionally scoped to a category (a
+        player-chosen collection: "python-keywords", "abbreviations", ...).
+        Raises ValueError if no term matches (empty bank, or category has
+        no terms).
 
         round_id is optional: unauthenticated callers (or callers before
         a round exists) still get a plain random term, unexcluded.
@@ -352,7 +359,20 @@ class GetRandomTerm:
                 round_ = await self.uow.rounds.by_id(round_id)
                 if round_ is not None:
                     excluded_ids = frozenset(a.term_id for a in round_.answers)
-            term = await self.uow.terms.random(excluded_ids)
+            term = await self.uow.terms.random(excluded_ids, category)
             if term is None:
                 raise ValueError("No terms available")
             return term
+
+
+class ListTermCategories:
+    """List every category slug present in the term bank — the collections
+    a player can choose to play from."""
+
+    def __init__(self, uow: UnitOfWork) -> None:
+        self.uow = uow
+
+    async def execute(self) -> tuple[str, ...]:
+        """Return every category slug, sorted."""
+        async with self.uow:
+            return await self.uow.terms.categories()

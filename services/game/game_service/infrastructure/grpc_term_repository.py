@@ -76,9 +76,15 @@ class GrpcTermRepository(TermRepository):
         self._cache[term_id] = (term, time.monotonic())
         return term
 
-    async def random(self, excluded_ids: frozenset[str] = frozenset()) -> Term | None:
+    async def random(
+        self,
+        excluded_ids: frozenset[str] = frozenset(),
+        category: str | None = None,
+    ) -> Term | None:
         try:
-            request = term_pb2.GetRandomRequest(excluded_ids=excluded_ids)
+            request = term_pb2.GetRandomRequest(
+                excluded_ids=excluded_ids, category=category
+            )
             reply = await self._stub.GetRandom(request)
         except grpc.aio.AioRpcError as exc:
             logger.warning("content-service GetRandom failed: %s", exc)
@@ -87,3 +93,11 @@ class GrpcTermRepository(TermRepository):
         if not reply.found:
             return None
         return _from_reply(reply)
+
+    async def categories(self) -> tuple[str, ...]:
+        try:
+            reply = await self._stub.ListCategories(term_pb2.ListCategoriesRequest())
+        except grpc.aio.AioRpcError as exc:
+            logger.warning("content-service ListCategories failed: %s", exc)
+            return ()
+        return tuple(reply.categories)

@@ -6,6 +6,7 @@ import pytest
 
 from content_service.application.use_cases import GetRandomTerm
 from content_service.application.use_cases import GetTermById
+from content_service.application.use_cases import ListCategories
 from content_service.application.use_cases import PublishTerm
 from content_service.domain.term import Category
 from content_service.domain.term import Term
@@ -83,6 +84,44 @@ async def test_get_random_term_falls_back_once_all_ids_excluded(
     result = await use_case.execute(frozenset({term.id}))
 
     assert result == term
+
+
+@pytest.mark.asyncio
+async def test_get_random_term_scopes_to_category(term: Term) -> None:
+    other = term.model_copy(
+        update={
+            "id": "lambda",
+            "term": "lambda",
+            "categories": (Category(slug="python-keywords"),),
+        }
+    )
+    uow = InMemoryUnitOfWork(terms={term.id: term, other.id: other})
+    use_case = GetRandomTerm(uow)
+
+    result = await use_case.execute(category="python-keywords")
+
+    assert result == other
+
+
+@pytest.mark.asyncio
+async def test_get_random_term_raises_when_category_has_no_terms(
+    uow: InMemoryUnitOfWork,
+) -> None:
+    use_case = GetRandomTerm(uow)
+
+    with pytest.raises(ValueError, match="No terms available"):
+        await use_case.execute(category="nonexistent-category")
+
+
+@pytest.mark.asyncio
+async def test_list_categories_returns_every_distinct_slug(term: Term) -> None:
+    other = term.model_copy(
+        update={"id": "lambda", "categories": (Category(slug="python-keywords"),)}
+    )
+    uow = InMemoryUnitOfWork(terms={term.id: term, other.id: other})
+    use_case = ListCategories(uow)
+
+    assert await use_case.execute() == ("architecture", "python-keywords")
 
 
 @pytest.mark.asyncio

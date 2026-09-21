@@ -44,13 +44,14 @@ async def session(postgres_url: str) -> AsyncGenerator[AsyncSession]:
     await engine.dispose()
 
 
-def _term(term_id: str) -> Term:
+def _term(term_id: str, *categories: str) -> Term:
     return Term(
         id=term_id,
         term=term_id.upper(),
         expansion=f"{term_id} expansion",
         definitions=(f"{term_id} definition.",),
-        categories=(Category(slug="architecture"),),
+        categories=tuple(Category(slug=c) for c in categories)
+        or (Category(slug="architecture"),),
     )
 
 
@@ -84,3 +85,62 @@ async def test_random_returns_none_when_bank_is_empty(session: AsyncSession) -> 
     repo = SQLTermRepository(session)
 
     assert await repo.random() is None
+
+
+@pytest.mark.asyncio
+async def test_random_scopes_to_category(session: AsyncSession) -> None:
+    repo = SQLTermRepository(session)
+    await repo.upsert(_term("uow", "architecture"))
+    await repo.upsert(_term("lambda", "python-keywords"))
+    await session.commit()
+
+    result = await repo.random(category="python-keywords")
+
+    assert result is not None
+    assert result.id == "lambda"
+
+
+@pytest.mark.asyncio
+async def test_random_returns_none_when_category_has_no_terms(
+    session: AsyncSession,
+) -> None:
+    repo = SQLTermRepository(session)
+    await repo.upsert(_term("uow", "architecture"))
+    await session.commit()
+
+    assert await repo.random(category="nonexistent-category") is None
+
+
+@pytest.mark.asyncio
+async def test_random_falls_back_within_category_once_excluded(
+    session: AsyncSession,
+) -> None:
+    repo = SQLTermRepository(session)
+    await repo.upsert(_term("lambda", "python-keywords"))
+    await repo.upsert(_term("uow", "architecture"))
+    await session.commit()
+
+    result = await repo.random(frozenset({"lambda"}), category="python-keywords")
+
+    assert result is not None
+    assert result.id == "lambda"  # falls back within category, not to "uow"
+
+
+@pytest.mark.asyncio
+async def test_categories_lists_every_distinct_slug(session: AsyncSession) -> None:
+    repo = SQLTermRepository(session)
+    await repo.upsert(_term("uow", "architecture"))
+    await repo.upsert(_term("lambda", "python-keywords"))
+    await repo.upsert(_term("cqrs", "architecture"))
+    await session.commit()
+
+    result = await repo.categories()
+
+    assert result == ("architecture", "python-keywords")
+
+
+@pytest.mark.asyncio
+async def test_categories_empty_when_bank_is_empty(session: AsyncSession) -> None:
+    repo = SQLTermRepository(session)
+
+    assert await repo.categories() == ()
