@@ -18,6 +18,7 @@ from term_proto import term_pb2_grpc
 from content_service.application.ports import UnitOfWork
 from content_service.application.use_cases import GetRandomTerm
 from content_service.application.use_cases import GetTermById
+from content_service.application.use_cases import ListCategories
 from content_service.domain.term import Term
 
 logger = logging.getLogger(__name__)
@@ -71,11 +72,22 @@ class TermServiceServicer(term_pb2_grpc.TermServiceServicer):
     ) -> term_pb2.TermReply:
         async with asynccontextmanager(self._get_unit_of_work)() as uow:
             use_case = GetRandomTerm(uow)
+            category = request.category if request.HasField("category") else None
             try:
-                term = await use_case.execute(frozenset(request.excluded_ids))
+                term = await use_case.execute(frozenset(request.excluded_ids), category)
             except ValueError:
                 return term_pb2.TermReply(found=False)
             return _to_reply(term)
+
+    async def ListCategories(
+        self,
+        request: term_pb2.ListCategoriesRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> term_pb2.ListCategoriesReply:
+        async with asynccontextmanager(self._get_unit_of_work)() as uow:
+            use_case = ListCategories(uow)
+            categories = await use_case.execute()
+            return term_pb2.ListCategoriesReply(categories=categories)
 
 
 async def serve(

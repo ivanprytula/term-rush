@@ -4,6 +4,7 @@ package termrush.content.v1;
 service TermService {
   rpc GetById(GetByIdRequest) returns (TermReply);
   rpc GetRandom(GetRandomRequest) returns (TermReply);
+  rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesReply);
 }
 
 message GetByIdRequest {
@@ -12,6 +13,14 @@ message GetByIdRequest {
 
 message GetRandomRequest {
   repeated string excluded_ids = 1;
+  // Empty means no filter (whole bank), matching today's behavior.
+  optional string category = 2;
+}
+
+message ListCategoriesRequest {}
+
+message ListCategoriesReply {
+  repeated string categories = 1;
 }
 
 message TermReply {

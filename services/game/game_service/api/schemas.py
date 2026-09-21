@@ -42,6 +42,14 @@ TermIdPath = Annotated[
     Path(min_length=constants.TERM_ID_MIN_LEN, max_length=constants.TERM_ID_MAX_LEN),
 ]
 
+# Optional: GET /terms/random works without one (whole bank), but supplying
+# a category slug ("python-keywords", "abbreviations", ...) scopes the pick
+# to that player-chosen collection.
+CategoryQuery = Annotated[
+    str | None,
+    Query(pattern=r"^[a-z][a-z0-9-]*$", max_length=constants.TERM_SLUG_MAX_LEN),
+]
+
 
 class CreateRoundRequest(BaseModel):
     """Start a new round.
@@ -247,6 +255,12 @@ class TermPromptResponse(BaseModel):
     def from_term(term: Term) -> TermPromptResponse:
         """Convert a Term to a prompt response."""
         return TermPromptResponse(id=term.id, term=term.term)
+
+
+class TermCategoriesResponse(BaseModel):
+    """Every collection a player can choose to play from."""
+
+    categories: tuple[str, ...]
 
 
 class TermStatsResponse(BaseModel):

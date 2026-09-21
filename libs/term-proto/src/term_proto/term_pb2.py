@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\nterm.proto\x12\x13termrush.content.v1\"!\n\x0eGetByIdRequest\x12\x0f\n\x07term_id\x18\x01 \x01(\t\"(\n\x10GetRandomRequest\x12\x14\n\x0c\x65xcluded_ids\x18\x01 \x03(\t\"\xe8\x01\n\tTermReply\x12\r\n\x05\x66ound\x18\x01 \x01(\x08\x12\n\n\x02id\x18\x02 \x01(\t\x12\x0c\n\x04term\x18\x03 \x01(\t\x12\x11\n\texpansion\x18\x04 \x01(\t\x12\x13\n\x0b\x64\x65\x66initions\x18\x05 \x03(\t\x12\x0f\n\x07\x61liases\x18\x06 \x03(\t\x12\x12\n\ncategories\x18\x07 \x03(\t\x12\x12\n\ndifficulty\x18\x08 \x01(\x05\x12\x10\n\x08\x65xamples\x18\t \x03(\t\x12\x0f\n\x07related\x18\n \x03(\t\x12\x15\n\rprerequisites\x18\x0b \x03(\t\x12\x17\n\x0f\x63ommon_mistakes\x18\x0c \x03(\t2\xb1\x01\n\x0bTermService\x12N\n\x07GetById\x12#.termrush.content.v1.GetByIdRequest\x1a\x1e.termrush.content.v1.TermReply\x12R\n\tGetRandom\x12%.termrush.content.v1.GetRandomRequest\x1a\x1e.termrush.content.v1.TermReplyb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\nterm.proto\x12\x13termrush.content.v1\"!\n\x0eGetByIdRequest\x12\x0f\n\x07term_id\x18\x01 \x01(\t\"L\n\x10GetRandomRequest\x12\x14\n\x0c\x65xcluded_ids\x18\x01 \x03(\t\x12\x15\n\x08\x63\x61tegory\x18\x02 \x01(\tH\x00\x88\x01\x01\x42\x0b\n\t_category\"\x17\n\x15ListCategoriesRequest\")\n\x13ListCategoriesReply\x12\x12\n\ncategories\x18\x01 \x03(\t\"\xe8\x01\n\tTermReply\x12\r\n\x05\x66ound\x18\x01 \x01(\x08\x12\n\n\x02id\x18\x02 \x01(\t\x12\x0c\n\x04term\x18\x03 \x01(\t\x12\x11\n\texpansion\x18\x04 \x01(\t\x12\x13\n\x0b\x64\x65\x66initions\x18\x05 \x03(\t\x12\x0f\n\x07\x61liases\x18\x06 \x03(\t\x12\x12\n\ncategories\x18\x07 \x03(\t\x12\x12\n\ndifficulty\x18\x08 \x01(\x05\x12\x10\n\x08\x65xamples\x18\t \x03(\t\x12\x0f\n\x07related\x18\n \x03(\t\x12\x15\n\rprerequisites\x18\x0b \x03(\t\x12\x17\n\x0f\x63ommon_mistakes\x18\x0c \x03(\t2\x99\x02\n\x0bTermService\x12N\n\x07GetById\x12#.termrush.content.v1.GetByIdRequest\x1a\x1e.termrush.content.v1.TermReply\x12R\n\tGetRandom\x12%.termrush.content.v1.GetRandomRequest\x1a\x1e.termrush.content.v1.TermReply\x12\x66\n\x0eListCategories\x12*.termrush.content.v1.ListCategoriesRequest\x1a(.termrush.content.v1.ListCategoriesReplyb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,9 +34,13 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETBYIDREQUEST']._serialized_start=35
   _globals['_GETBYIDREQUEST']._serialized_end=68
   _globals['_GETRANDOMREQUEST']._serialized_start=70
-  _globals['_GETRANDOMREQUEST']._serialized_end=110
-  _globals['_TERMREPLY']._serialized_start=113
-  _globals['_TERMREPLY']._serialized_end=345
-  _globals['_TERMSERVICE']._serialized_start=348
-  _globals['_TERMSERVICE']._serialized_end=525
+  _globals['_GETRANDOMREQUEST']._serialized_end=146
+  _globals['_LISTCATEGORIESREQUEST']._serialized_start=148
+  _globals['_LISTCATEGORIESREQUEST']._serialized_end=171
+  _globals['_LISTCATEGORIESREPLY']._serialized_start=173
+  _globals['_LISTCATEGORIESREPLY']._serialized_end=214
+  _globals['_TERMREPLY']._serialized_start=217
+  _globals['_TERMREPLY']._serialized_end=449
+  _globals['_TERMSERVICE']._serialized_start=452
+  _globals['_TERMSERVICE']._serialized_end=733
 # @@protoc_insertion_point(module_scope)

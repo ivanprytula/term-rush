@@ -412,3 +412,65 @@ def test_get_term_stats_for_a_nonexistent_term(
     response = client.get("/terms/nonexistent/stats")
 
     assert response.status_code == 404
+
+
+@pytest.fixture
+def client_with_two_categories() -> Generator[TestClient]:
+    """A bank with one term in "architecture" and one in "python-keywords" —
+    lets a test prove category scoping actually narrows the pick."""
+    uow_term = Term(
+        id="uow",
+        term="UoW",
+        expansion="Unit of Work",
+        definitions=("Pattern that groups related changes into one unit.",),
+        categories=(Category(slug="architecture"),),
+    )
+    lambda_term = Term(
+        id="lambda",
+        term="lambda",
+        expansion="anonymous function",
+        definitions=("A function defined without a name.",),
+        categories=(Category(slug="python-keywords"),),
+    )
+    uow = InMemoryUnitOfWork(terms={"uow": uow_term, "lambda": lambda_term})
+
+    async def override_get_unit_of_work():
+        yield uow
+
+    app.dependency_overrides[get_unit_of_work] = override_get_unit_of_work
+    with TestClient(app) as client:
+        yield client
+    app.dependency_overrides.pop(get_unit_of_work, None)
+
+
+def test_get_random_term_scoped_to_category(
+    client_with_two_categories: TestClient,
+) -> None:
+    """GET /terms/random?category=... only returns terms in that collection."""
+    response = client_with_two_categories.get(
+        "/terms/random", params={"category": "python-keywords"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "lambda"
+
+
+def test_get_random_term_category_with_no_terms_is_404(
+    client_with_two_categories: TestClient,
+) -> None:
+    """A category slug that matches nothing maps to the same 404 as an
+    empty bank — ValueError from the use case, handled generically."""
+    response = client_with_two_categories.get(
+        "/terms/random", params={"category": "nonexistent-category"}
+    )
+
+    assert response.status_code == 404
+
+
+def test_get_term_categories_lists_every_collection(
+    client_with_two_categories: TestClient,
+) -> None:
+    response = client_with_two_categories.get("/terms/categories")
+
+    assert response.status_code == 200
+    assert response.json() == {"categories": ["architecture", "python-keywords"]}

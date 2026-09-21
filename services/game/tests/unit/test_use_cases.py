@@ -13,6 +13,7 @@ import pytest
 from game_service.application.use_cases import CreateGameRound
 from game_service.application.use_cases import GetRandomTerm
 from game_service.application.use_cases import GetRound
+from game_service.application.use_cases import ListTermCategories
 from game_service.application.use_cases import SubmitAnswer
 from game_service.application.use_cases import SubmitAnswerStreaming
 from game_service.domain.llm_grader import LLMJudgment
@@ -195,6 +196,46 @@ async def test_get_random_term_empty_bank_raises() -> None:
     empty_uow = InMemoryUnitOfWork()
     with pytest.raises(ValueError, match="No terms"):
         await GetRandomTerm(empty_uow).execute()
+
+
+@pytest.mark.asyncio
+async def test_get_random_term_scopes_to_category() -> None:
+    """category, if given, scopes the pick to that collection."""
+    uow_term = Term(
+        id="uow",
+        term="UoW",
+        expansion="Unit of Work",
+        definitions=("Pattern that groups related changes into one unit.",),
+        categories=(Category(slug="architecture"),),
+    )
+    lambda_term = Term(
+        id="lambda",
+        term="lambda",
+        expansion="anonymous function",
+        definitions=("A function defined without a name.",),
+        categories=(Category(slug="python-keywords"),),
+    )
+    uow = InMemoryUnitOfWork(terms={"uow": uow_term, "lambda": lambda_term})
+
+    term = await GetRandomTerm(uow).execute(category="python-keywords")
+
+    assert term.id == "lambda"
+
+
+@pytest.mark.asyncio
+async def test_get_random_term_raises_when_category_has_no_terms(
+    uow: InMemoryUnitOfWork,
+) -> None:
+    """A category with no matching terms raises, same as an empty bank."""
+    with pytest.raises(ValueError, match="No terms"):
+        await GetRandomTerm(uow).execute(category="nonexistent-category")
+
+
+@pytest.mark.asyncio
+async def test_list_term_categories_returns_every_distinct_slug(
+    uow: InMemoryUnitOfWork,
+) -> None:
+    assert await ListTermCategories(uow).execute() == ("architecture",)
 
 
 class FakeJudgePort:

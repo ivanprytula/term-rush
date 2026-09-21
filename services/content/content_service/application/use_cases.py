@@ -30,13 +30,30 @@ class GetRandomTerm:
     def __init__(self, uow: UnitOfWork) -> None:
         self.uow = uow
 
-    async def execute(self, excluded_ids: frozenset[str] = frozenset()) -> Term:
-        """Return a random term. Raises ValueError if the term bank is empty."""
+    async def execute(
+        self,
+        excluded_ids: frozenset[str] = frozenset(),
+        category: str | None = None,
+    ) -> Term:
+        """Return a random term, optionally scoped to a category. Raises
+        ValueError if no term matches (empty bank, or category has no terms)."""
         async with self.uow:
-            term = await self.uow.terms.random(excluded_ids)
+            term = await self.uow.terms.random(excluded_ids, category)
             if term is None:
                 raise ValueError("No terms available")
             return term
+
+
+class ListCategories:
+    """List every category slug present in the term bank."""
+
+    def __init__(self, uow: UnitOfWork) -> None:
+        self.uow = uow
+
+    async def execute(self) -> tuple[str, ...]:
+        """Return every category slug, sorted."""
+        async with self.uow:
+            return await self.uow.terms.categories()
 
 
 class PublishTerm:

@@ -35,15 +35,20 @@ export async function mockBackend(
     // differ from round N+1's (e.g. proving play-again re-syncs the
     // countdown rather than reusing the expired round's value).
     sprintDurationSeconds?: number | ((roundNumber: number) => number);
+    // Empty by default (see the /terms/categories mock below) — a test
+    // exercising the picker itself overrides this.
+    categories?: string[];
   } = {},
-) {
+): Promise<{ lastRandomTermCategory: () => string | null }> {
   const gradeRule = options.gradeRule ?? defaultGradeRule;
   const sprintDuration =
     typeof options.sprintDurationSeconds === "function"
       ? options.sprintDurationSeconds
       : () => options.sprintDurationSeconds ?? 60;
+  const categories = options.categories ?? [];
   let roundCounter = 0;
   let termIndex = 0;
+  let lastRandomTermCategory: string | null = null;
 
   await page.route("**/game-rounds", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
@@ -69,12 +74,25 @@ export async function mockBackend(
   });
 
   await page.route("**/terms/random**", async (route) => {
+    const url = new URL(route.request().url());
+    lastRandomTermCategory = url.searchParams.get("category");
     const term = TERMS[termIndex % TERMS.length];
     termIndex += 1;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(term),
+    });
+  });
+
+  // Empty by default: existing tests don't exercise the collection picker,
+  // and CategoryPicker renders nothing for an empty list — no dropdown to
+  // interact with, no change to existing test assertions.
+  await page.route("**/terms/categories", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ categories }),
     });
   });
 
@@ -95,4 +113,6 @@ export async function mockBackend(
       }),
     });
   });
+
+  return { lastRandomTermCategory: () => lastRandomTermCategory };
 }

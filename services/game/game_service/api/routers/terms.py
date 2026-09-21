@@ -10,14 +10,17 @@ from fastapi import status
 
 from game_service.api.dependencies import get_term_stats_repository
 from game_service.api.dependencies import get_unit_of_work
+from game_service.api.schemas import CategoryQuery
 from game_service.api.schemas import ErrorResponse
 from game_service.api.schemas import RoundIdQuery
+from game_service.api.schemas import TermCategoriesResponse
 from game_service.api.schemas import TermIdPath
 from game_service.api.schemas import TermPromptResponse
 from game_service.api.schemas import TermStatsResponse
 from game_service.application.ports import TermStatsRepository
 from game_service.application.ports import UnitOfWork
 from game_service.application.use_cases import GetRandomTerm
+from game_service.application.use_cases import ListTermCategories
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/terms", tags=["terms"])
@@ -31,20 +34,37 @@ router = APIRouter(prefix="/terms", tags=["terms"])
 )
 async def get_random_term(
     round_id: RoundIdQuery = None,
+    category: CategoryQuery = None,
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> TermPromptResponse:
     """Fetch a random term to present to the player.
 
     round_id, if given, excludes terms already answered this round —
-    avoids repeating a term mid-round where the bank allows it.
+    avoids repeating a term mid-round where the bank allows it. category,
+    if given, scopes the pick to a player-chosen collection (a category
+    slug from GET /terms/categories).
     """
     use_case = GetRandomTerm(uow)
     try:
-        term = await use_case.execute(round_id)
+        term = await use_case.execute(round_id, category)
         return TermPromptResponse.from_term(term)
     except ValueError as exc:
         logger.warning(f"Random term lookup failed: {exc}")
         raise exc
+
+
+@router.get(
+    "/categories",
+    response_model=TermCategoriesResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_term_categories(
+    uow: UnitOfWork = Depends(get_unit_of_work),
+) -> TermCategoriesResponse:
+    """List every collection a player can choose to play from."""
+    use_case = ListTermCategories(uow)
+    categories = await use_case.execute()
+    return TermCategoriesResponse(categories=categories)
 
 
 @router.get(

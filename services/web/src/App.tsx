@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   createRoundGameRoundsPost,
   getRandomTermTermsRandomGet,
+  getTermCategoriesTermsCategoriesGet,
   submitAnswerGameRoundsRoundIdAnswersSubmitPost,
 } from "./client";
 import type { SubmitAnswerResponse, TermPromptResponse } from "./client";
@@ -52,6 +53,43 @@ function ThemeToggle({
         </option>
       ))}
     </select>
+  );
+}
+
+// null means "All terms" (no filter) — the <select>'s own empty-string
+// option, not a real category slug, so it can't collide with one.
+const ALL_TERMS = "";
+
+function CategoryPicker({
+  categories,
+  selected,
+  onChange,
+}: {
+  categories: string[];
+  selected: string | null;
+  onChange: (category: string | null) => void;
+}) {
+  // Nothing to pick from yet (still loading, or the bank has no tagged
+  // categories) — rather than show a dropdown with only "All terms" in it.
+  if (categories.length === 0) return null;
+  return (
+    <label className="flex items-center justify-center gap-2 text-sm text-text-dim">
+      collection
+      <select
+        value={selected ?? ALL_TERMS}
+        onChange={(e) =>
+          onChange(e.target.value === ALL_TERMS ? null : e.target.value)
+        }
+        className="bg-surface border border-surface-border text-text px-2 py-1 focus:outline-none focus:border-phosphor"
+      >
+        <option value={ALL_TERMS}>All terms</option>
+        {categories.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -260,6 +298,17 @@ export default function App() {
   // The round's own mode, as returned by the server — distinct from
   // sprintMode (the toggle for the *next* round to start).
   const [roundMode, setRoundMode] = useState<"classic" | "sprint">("classic");
+  // Every collection the player can choose to play from — fetched once on
+  // mount, not tied to any round.
+  const [categories, setCategories] = useState<string[]>([]);
+  // Picker's live value; null means "All terms". Unlike sprintMode/roundMode,
+  // category isn't a round property server-side — it's a query param on
+  // every GET /terms/random call, so roundCategory (below) is what actually
+  // gets reused across a round's term fetches.
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  // Locked in at round start, same pattern as roundMode — changing the
+  // picker mid-round has no effect until the next "start round"/"play again".
+  const [roundCategory, setRoundCategory] = useState<string | null>(null);
   // Server's remaining_seconds as of the last round response; re-syncs the
   // rAF countdown below whenever a fresh round starts.
   const [serverRemaining, setServerRemaining] = useState<number | null>(null);
@@ -270,13 +319,16 @@ export default function App() {
     roundMode === "classic" ? answers.length >= ROUND_LENGTH : sprintExpired;
   const started = roundId !== null;
 
-  const loadTerm = async (activeRoundId: string) => {
+  // category defaults to roundCategory (the round's locked-in choice) so
+  // every call site except startRound (which hasn't locked it in yet this
+  // tick) can omit the argument.
+  const loadTerm = async (activeRoundId: string, category = roundCategory) => {
     setError(null);
     setResult(null);
     setAnswer("");
     setLiveFeedback(null);
     const { data } = await getRandomTermTermsRandomGet({
-      query: { round_id: activeRoundId },
+      query: { round_id: activeRoundId, category: category ?? undefined },
     });
     // The generated client can return a falsy `error` (e.g. "") on some
     // failure shapes, so check for a real response body instead of
@@ -291,9 +343,11 @@ export default function App() {
   // Starts a round server-side and loads its first term. Used both on
   // mount and on "play again" — each is a genuinely new round, not a
   // continuation, so both mint a fresh id rather than reusing one. Mode is
-  // fixed by the sprintMode toggle at the moment the round starts.
+  // fixed by the sprintMode toggle at the moment the round starts; category
+  // likewise locks in selectedCategory as roundCategory.
   const startRound = async () => {
     setError(null);
+    setRoundCategory(selectedCategory);
     const { data } = await createRoundGameRoundsPost({
       body: { mode: sprintMode ? "sprint" : "classic" },
     });
@@ -304,7 +358,9 @@ export default function App() {
     setRoundId(data.id);
     setRoundMode(data.mode === "sprint" ? "sprint" : "classic");
     setServerRemaining(data.remaining_seconds ?? null);
-    await loadTerm(data.id);
+    // Explicit selectedCategory, not loadTerm's roundCategory default:
+    // setRoundCategory above hasn't committed yet in this same tick.
+    await loadTerm(data.id, selectedCategory);
   };
 
   const startNewRound = () => {
@@ -316,6 +372,21 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
+
+  // Once per mount, not per round — the collection list doesn't change
+  // mid-session. A failed fetch just means no picker renders (CategoryPicker
+  // returns null on an empty list) rather than an error state; "All terms"
+  // still works with zero categories loaded.
+  useEffect(() => {
+    getTermCategoriesTermsCategoriesGet()
+      .then(({ data }) => {
+        if (data) setCategories(data.categories);
+      })
+      // A network failure here just means no picker renders (see
+      // CategoryPicker's empty-list guard) — "All terms" still works with
+      // zero categories loaded, so this never becomes a blocking error.
+      .catch(() => {});
+  }, []);
 
   const finishGrading = (data: SubmitAnswerResponse) => {
     setResult(data);
@@ -400,6 +471,11 @@ export default function App() {
               />
               sprint mode (60s countdown)
             </label>
+            <CategoryPicker
+              categories={categories}
+              selected={selectedCategory}
+              onChange={setSelectedCategory}
+            />
             <button
               type="button"
               autoFocus

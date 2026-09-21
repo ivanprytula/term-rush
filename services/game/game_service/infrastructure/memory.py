@@ -28,11 +28,30 @@ class InMemoryTermRepository(TermRepository):
     async def by_id(self, term_id: str) -> Term | None:
         return self.terms.get(term_id)
 
-    async def random(self, excluded_ids: frozenset[str] = frozenset()) -> Term | None:
+    async def random(
+        self,
+        excluded_ids: frozenset[str] = frozenset(),
+        category: str | None = None,
+    ) -> Term | None:
         if not self.terms:
             return None
-        candidates = [t for t in self.terms.values() if t.id not in excluded_ids]
-        return random.choice(candidates or list(self.terms.values()))
+        in_category = (
+            [
+                t
+                for t in self.terms.values()
+                if any(c.slug == category for c in t.categories)
+            ]
+            if category is not None
+            else list(self.terms.values())
+        )
+        if not in_category:
+            return None
+        candidates = [t for t in in_category if t.id not in excluded_ids]
+        return random.choice(candidates or in_category)
+
+    async def categories(self) -> tuple[str, ...]:
+        slugs = {c.slug for t in self.terms.values() for c in t.categories}
+        return tuple(sorted(slugs))
 
 
 class InMemoryRoundRepository(RoundRepository):
