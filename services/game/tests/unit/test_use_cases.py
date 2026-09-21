@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
 
 import pytest
 
+from game_service.application.use_cases import CreateGameRound
 from game_service.application.use_cases import GetRandomTerm
 from game_service.application.use_cases import GetRound
 from game_service.application.use_cases import SubmitAnswer
@@ -16,6 +20,9 @@ from game_service.domain.llm_grader import LLMRubricGrader
 from game_service.domain.outcome import MatchedVia
 from game_service.domain.outcome import StreamEventKind
 from game_service.domain.outcome import Verdict
+from game_service.domain.round import GameRound
+from game_service.domain.round import RoundExpired
+from game_service.domain.round import RoundMode
 from game_service.domain.term import Category
 from game_service.domain.term import Difficulty
 from game_service.domain.term import Term
@@ -108,6 +115,39 @@ async def test_submit_answer_appends_to_existing_round(
     round_ = await uow.rounds.by_id("round-1")
     assert round_ is not None
     assert len(round_.answers) == 2
+
+
+@pytest.mark.asyncio
+async def test_create_game_round_mints_and_persists(uow: InMemoryUnitOfWork) -> None:
+    """Creating a round mints an id and saves an empty round under it."""
+    round_ = await CreateGameRound(uow).execute()
+
+    assert round_.answers == ()
+    stored = await uow.rounds.by_id(round_.id)
+    assert stored == round_
+
+
+@pytest.mark.asyncio
+async def test_create_game_round_sprint_sets_timer_fields(
+    uow: InMemoryUnitOfWork,
+) -> None:
+    """Creating a Sprint round starts its countdown immediately."""
+    round_ = await CreateGameRound(uow).execute(
+        mode=RoundMode.SPRINT, duration_seconds=30
+    )
+
+    assert round_.mode is RoundMode.SPRINT
+    assert round_.started_at is not None
+    assert round_.duration_seconds == 30
+
+
+@pytest.mark.asyncio
+async def test_create_game_round_mints_distinct_ids(uow: InMemoryUnitOfWork) -> None:
+    """Two calls produce two distinct rounds."""
+    first = await CreateGameRound(uow).execute()
+    second = await CreateGameRound(uow).execute()
+
+    assert first.id != second.id
 
 
 @pytest.mark.asyncio
@@ -205,6 +245,42 @@ async def test_submit_answer_escalates_on_partial_when_opted_in(
 
     assert outcome.matched_via is MatchedVia.LLM_RUBRIC
     assert outcome.score == 100
+
+
+@pytest.mark.asyncio
+async def test_submit_answer_forces_off_llm_grading_in_sprint_mode(
+    uow: InMemoryUnitOfWork,
+) -> None:
+    """Sprint rounds never escalate to the LLM judge, even with opt-in."""
+    now = datetime.now(UTC)
+    sprint_round = GameRound.start(now, mode=RoundMode.SPRINT, duration_seconds=60)
+    await uow.rounds.save(sprint_round)
+    judgment = LLMJudgment(
+        concept=40, expansion=30, purpose=20, example=10, rationale="Full marks."
+    )
+    llm_grader = LLMRubricGrader(FakeJudgePort(judgment=judgment))
+    use_case = SubmitAnswer(uow, llm_grader=llm_grader)
+
+    outcome = await use_case.execute(
+        sprint_round.id, "uow", "work of the unit thing", use_llm_grading=True
+    )
+
+    assert outcome.matched_via is MatchedVia.FUZZY
+    assert outcome.verdict is Verdict.PARTIAL
+
+
+@pytest.mark.asyncio
+async def test_submit_answer_raises_round_expired_past_sprint_deadline(
+    uow: InMemoryUnitOfWork,
+) -> None:
+    """A Sprint round's timer running out rejects further submissions."""
+    now = datetime.now(UTC) - timedelta(seconds=61)
+    sprint_round = GameRound.start(now, mode=RoundMode.SPRINT, duration_seconds=60)
+    await uow.rounds.save(sprint_round)
+    use_case = SubmitAnswer(uow)
+
+    with pytest.raises(RoundExpired):
+        await use_case.execute(sprint_round.id, "uow", "Unit of Work")
 
 
 @pytest.mark.asyncio

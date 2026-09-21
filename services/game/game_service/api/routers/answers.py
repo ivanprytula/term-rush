@@ -23,6 +23,8 @@ from game_service.application.use_cases import SubmitAnswer
 from game_service.application.use_cases import SubmitAnswerStreaming
 from game_service.domain.graders import AnswerEvaluator
 from game_service.domain.llm_grader import LLMRubricGrader
+from game_service.domain.round import RoundExpired
+from game_service.domain.round import RoundFull
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/game-rounds", tags=["answers"])
@@ -89,9 +91,10 @@ async def submit_answer_stream(
     INCORRECT, no opt-in, or a cache hit — emits only the single "graded"
     event immediately: there is nothing to stream.
 
-    404 (term not found) surfaces as an "error" SSE event, not an HTTP 404
-    status: the response has already started streaming by the time grading
-    can fail, so the status code is fixed at 200 once the connection opens.
+    404 (term not found), 422 (round full or expired) all surface as an
+    "error" SSE event, not an HTTP status: the response has already started
+    streaming by the time grading can fail, so the status code is fixed at
+    200 once the connection opens.
     """
     use_case = SubmitAnswerStreaming(uow, evaluator=evaluator, llm_grader=llm_grader)
 
@@ -102,7 +105,7 @@ async def submit_answer_stream(
             ):
                 sse_event = SubmitAnswerStreamEvent.from_stream_event(event)
                 yield {"event": sse_event.event, "data": sse_event.data}
-        except ValueError as exc:
+        except (ValueError, RoundFull, RoundExpired) as exc:
             logger.warning(f"Streaming grading failed: {exc}")
             yield {"event": "error", "data": str(exc)}
 

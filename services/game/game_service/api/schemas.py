@@ -19,6 +19,7 @@ from game_service.domain.outcome import GradeOutcome
 from game_service.domain.outcome import StreamEvent
 from game_service.domain.outcome import StreamEventKind
 from game_service.domain.round import GameRound
+from game_service.domain.round import RoundMode
 from game_service.domain.term import Term
 
 RoundIdPath = Annotated[str, Path(min_length=1, max_length=constants.ROUND_ID_MAX_LEN)]
@@ -34,6 +35,22 @@ LeaderboardLimitQuery = Annotated[
     int,
     Query(ge=constants.LEADERBOARD_MIN_LIMIT, le=constants.LEADERBOARD_MAX_LIMIT),
 ]
+
+
+class CreateRoundRequest(BaseModel):
+    """Start a new round.
+
+    mode: "classic" (untimed, default) or "sprint" (fixed countdown).
+    duration_seconds: Sprint-only; defaults to
+    DEFAULT_SPRINT_DURATION_SECONDS if omitted. Ignored for Classic.
+    """
+
+    mode: RoundMode = RoundMode.CLASSIC
+    duration_seconds: int | None = Field(
+        default=None,
+        ge=constants.MIN_SPRINT_DURATION_SECONDS,
+        le=constants.MAX_SPRINT_DURATION_SECONDS,
+    )
 
 
 class SubmitAnswerRequest(BaseModel):
@@ -169,10 +186,14 @@ class RoundResponse(BaseModel):
     id: str
     created_at: datetime
     answers: list[SubmittedAnswerResponse]
+    mode: str = Field(examples=["classic", "sprint"])
+    # Sprint only; null for Classic. Lets the client render a countdown
+    # without independently tracking wall-clock state.
+    remaining_seconds: float | None = None
 
     @staticmethod
-    def from_round(round_: GameRound) -> RoundResponse:
-        """Convert a GameRound to a response."""
+    def from_round(round_: GameRound, now: datetime) -> RoundResponse:
+        """Convert a GameRound to a response, as of `now`."""
         return RoundResponse(
             id=round_.id,
             created_at=round_.created_at,
@@ -186,6 +207,8 @@ class RoundResponse(BaseModel):
                 )
                 for a in round_.answers
             ],
+            mode=round_.mode.value,
+            remaining_seconds=round_.remaining_seconds(now),
         )
 
 

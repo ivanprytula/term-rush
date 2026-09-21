@@ -45,6 +45,11 @@ RECENT_WINDOW_DAYS = 7  # How long a term stays "recent" after first introductio
 ROUND_ID_MAX_LEN = 64
 ROUND_MAX_ANSWERS = 200  # generous ceiling; no game mode runs this long yet
 
+# Sprint mode
+DEFAULT_SPRINT_DURATION_SECONDS = 60
+MIN_SPRINT_DURATION_SECONDS = 10
+MAX_SPRINT_DURATION_SECONDS = 300
+
 # Leaderboard bounds
 LEADERBOARD_MIN_LIMIT = 1
 LEADERBOARD_MAX_LIMIT = 100
