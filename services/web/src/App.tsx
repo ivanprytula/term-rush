@@ -6,6 +6,7 @@ import {
 } from "./client";
 import type { SubmitAnswerResponse, TermPromptResponse } from "./client";
 import { submitAnswerStream } from "./submitAnswerStream";
+import { useSprintCountdown } from "./useSprintCountdown";
 
 const THEME_KEY = "term-rush-theme";
 const ROUND_LENGTH = 10;
@@ -136,9 +137,13 @@ function ResultPanel({
 
 function RoundSummary({
   answers,
+  heading = "round complete",
   onPlayAgain,
 }: {
   answers: SubmitAnswerResponse[];
+  // "time's up" reuses this panel for a Sprint round's expiry screen —
+  // same content (score + verdict breakdown), different trigger.
+  heading?: string;
   onPlayAgain: () => void;
 }) {
   const totalScore = answers.reduce((sum, a) => sum + a.score, 0);
@@ -151,10 +156,8 @@ function RoundSummary({
   return (
     <div className="bg-surface border border-surface-border p-6 space-y-4 text-center">
       <div>
-        <p className="text-sm text-text-dim mb-1"># round complete</p>
-        <p className="text-3xl font-bold tracking-tight">
-          {totalScore}/{ROUND_LENGTH * 100}
-        </p>
+        <p className="text-sm text-text-dim mb-1"># {heading}</p>
+        <p className="text-3xl font-bold tracking-tight">{totalScore}</p>
       </div>
       <div className="flex justify-center gap-4 text-sm">
         <span className="text-phosphor">{counts.correct} correct</span>
@@ -239,8 +242,21 @@ export default function App() {
   // live checkbox state, which the player could change before the result
   // renders. Answers "did we ask for AI feedback on this result?".
   const [requestedLlmGrading, setRequestedLlmGrading] = useState(false);
+  // Checked before starting a round; changing it has no effect on a round
+  // already in progress — mode is fixed server-side at creation.
+  const [sprintMode, setSprintMode] = useState(false);
+  // The round's own mode, as returned by the server — distinct from
+  // sprintMode (the toggle for the *next* round to start).
+  const [roundMode, setRoundMode] = useState<"classic" | "sprint">("classic");
+  // Server's remaining_seconds as of the last round response; re-syncs the
+  // rAF countdown below whenever a fresh round starts.
+  const [serverRemaining, setServerRemaining] = useState<number | null>(null);
+  const remainingSeconds = useSprintCountdown(serverRemaining);
+  const sprintExpired = roundMode === "sprint" && remainingSeconds === 0;
 
-  const roundComplete = answers.length >= ROUND_LENGTH;
+  const roundComplete =
+    roundMode === "classic" ? answers.length >= ROUND_LENGTH : sprintExpired;
+  const started = roundId !== null;
 
   const loadTerm = async (activeRoundId: string) => {
     setError(null);
@@ -262,15 +278,20 @@ export default function App() {
 
   // Starts a round server-side and loads its first term. Used both on
   // mount and on "play again" — each is a genuinely new round, not a
-  // continuation, so both mint a fresh id rather than reusing one.
+  // continuation, so both mint a fresh id rather than reusing one. Mode is
+  // fixed by the sprintMode toggle at the moment the round starts.
   const startRound = async () => {
     setError(null);
-    const { data } = await createRoundGameRoundsPost();
+    const { data } = await createRoundGameRoundsPost({
+      body: { mode: sprintMode ? "sprint" : "classic" },
+    });
     if (!data) {
       setError({ message: "Could not start a round.", retryAction: "load" });
       return;
     }
     setRoundId(data.id);
+    setRoundMode(data.mode === "sprint" ? "sprint" : "classic");
+    setServerRemaining(data.remaining_seconds ?? null);
     await loadTerm(data.id);
   };
 
@@ -278,10 +299,6 @@ export default function App() {
     setAnswers([]);
     startRound();
   };
-
-  useEffect(() => {
-    startRound();
-  }, []);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -303,7 +320,9 @@ export default function App() {
   const submitAnswer = async () => {
     // roundId is set by the time a term is on screen — startRound() always
     // loads a term after minting the round, never in either order.
-    if (!term || !answer.trim() || !roundId) return;
+    // sprintExpired: don't fire a submit the server would 422 anyway — the
+    // countdown reaching 0 already flips to the time's-up screen below.
+    if (!term || !answer.trim() || !roundId || sprintExpired) return;
     setLoading(true);
     setError(null);
     setRequestedLlmGrading(useLlmGrading);
@@ -358,9 +377,47 @@ export default function App() {
 
         <HowToPlay />
 
-        {!roundComplete && (
+        {/* Mode is fixed server-side at round creation — the toggle only
+            affects the round about to start, so it's shown before start
+            and again once a round ends (via RoundSummary's "play again"),
+            never mid-round. */}
+        {!started && (
+          <div className="bg-surface border border-surface-border p-6 space-y-4 text-center">
+            <label className="flex items-center justify-center gap-2 text-sm text-text-dim">
+              <input
+                type="checkbox"
+                checked={sprintMode}
+                onChange={(e) => setSprintMode(e.target.checked)}
+                className="accent-phosphor bg-surface border-surface-border"
+              />
+              sprint mode (60s countdown)
+            </label>
+            <button
+              type="button"
+              autoFocus
+              onClick={startRound}
+              className="w-full bg-phosphor text-ground hover:bg-phosphor-dim px-4 py-3 font-bold transition"
+            >
+              start round
+            </button>
+          </div>
+        )}
+
+        {started && !roundComplete && roundMode === "classic" && (
           <p className="text-sm text-text-dim text-center">
             term {Math.min(answers.length + 1, ROUND_LENGTH)}/{ROUND_LENGTH}
+          </p>
+        )}
+        {started && !roundComplete && roundMode === "sprint" && (
+          // aria-live: the number changes every frame — announcing every
+          // tick would spam a screen reader, so this is visual-only; the
+          // time's-up screen (an ordinary heading) is what gets announced.
+          <p
+            className="text-sm text-text-dim text-center tabular-nums"
+            aria-hidden="true"
+          >
+            {"⏱ "}
+            {Math.ceil(remainingSeconds ?? 0)}s
           </p>
         )}
 
@@ -453,7 +510,11 @@ export default function App() {
         )}
 
         {roundComplete && !result && (
-          <RoundSummary answers={answers} onPlayAgain={startNewRound} />
+          <RoundSummary
+            answers={answers}
+            heading={sprintExpired ? "time's up" : "round complete"}
+            onPlayAgain={startNewRound}
+          />
         )}
       </main>
     </div>
