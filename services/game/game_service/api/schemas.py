@@ -30,6 +30,11 @@ RoundIdQuery = Annotated[
     Query(min_length=1, max_length=constants.ROUND_ID_MAX_LEN),
 ]
 
+LeaderboardLimitQuery = Annotated[
+    int,
+    Query(ge=constants.LEADERBOARD_MIN_LIMIT, le=constants.LEADERBOARD_MAX_LIMIT),
+]
+
 
 class SubmitAnswerRequest(BaseModel):
     """Answer submission for grading.
@@ -181,6 +186,23 @@ class RoundResponse(BaseModel):
                 )
                 for a in round_.answers
             ],
+        )
+
+
+class LeaderboardEntryResponse(BaseModel):
+    """One ranked round on the leaderboard."""
+
+    round_id: str
+    total_score: int
+    created_at: datetime
+
+    @staticmethod
+    def from_round(round_: GameRound) -> LeaderboardEntryResponse:
+        """Convert a GameRound to a leaderboard entry."""
+        return LeaderboardEntryResponse(
+            round_id=round_.id,
+            total_score=round_.total_score,
+            created_at=round_.created_at,
         )
 
 

@@ -43,6 +43,12 @@ class GameRound(BaseModel):
     created_at: datetime
     answers: tuple[SubmittedAnswer, ...] = ()
 
+    @property
+    def total_score(self) -> int:
+        """Sum of all recorded answers' scores. Denormalized as a column for
+        leaderboard sorting — see SQLRoundRepository."""
+        return sum(a.score for a in self.answers)
+
     def record(self, answer: SubmittedAnswer) -> GameRound:
         """Return a new GameRound with the answer appended.
 

@@ -269,6 +269,18 @@ class GetRound:
             return round_
 
 
+class GetLeaderboard:
+    """Fetch the top rounds by total score."""
+
+    def __init__(self, uow: UnitOfWork) -> None:
+        self.uow = uow
+
+    async def execute(self, limit: int) -> list[GameRound]:
+        """Return up to `limit` rounds, highest total_score first."""
+        async with self.uow:
+            return await self.uow.rounds.top_by_score(limit)
+
+
 class GetRandomTerm:
     """Fetch a random term to present to the player, avoiding ones already
     seen this round where the bank allows it."""

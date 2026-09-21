@@ -63,6 +63,19 @@ def test_submitted_answer_rejects_score_out_of_bounds() -> None:
         )
 
 
+def test_total_score_sums_answers(answer: SubmittedAnswer) -> None:
+    second = answer.model_copy(update={"term_id": "leaderboard", "score": 45})
+    round_ = GameRound(id="s1", created_at=datetime.now(UTC), answers=(answer, second))
+
+    assert round_.total_score == 75
+
+
+def test_total_score_zero_when_no_answers() -> None:
+    round_ = GameRound(id="s1", created_at=datetime.now(UTC))
+
+    assert round_.total_score == 0
+
+
 def test_record_raises_round_full_at_max_answers(answer: SubmittedAnswer) -> None:
     full = GameRound(
         id="s1",

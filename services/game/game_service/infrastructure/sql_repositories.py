@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlalchemy import desc
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,9 +31,23 @@ class SQLRoundRepository(RoundRepository):
     async def save(self, round_: GameRound) -> None:
         """Upsert a round by ID."""
         stmt = insert(GameRoundModel).values(
-            id=round_.id, data=round_.model_dump_json()
+            id=round_.id,
+            data=round_.model_dump_json(),
+            total_score=round_.total_score,
         )
         stmt = stmt.on_conflict_do_update(
-            index_elements=["id"], set_={"data": stmt.excluded.data}
+            index_elements=["id"],
+            set_={"data": stmt.excluded.data, "total_score": stmt.excluded.total_score},
         )
         await self.session.execute(stmt)
+
+    async def top_by_score(self, limit: int) -> list[GameRound]:
+        """Fetch the top rounds by total_score, sorted in SQL via the
+        indexed column rather than deserializing every row's JSON."""
+        stmt = (
+            select(GameRoundModel)
+            .order_by(desc(GameRoundModel.total_score))
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return [GameRound.model_validate_json(m.data) for m in result.scalars()]
