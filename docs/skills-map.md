@@ -3,6 +3,16 @@
 The honest scoreboard. Every ladder point, where it lives in the codebase, and what
 state it is actually in — not what I intend it to be.
 
+**This is the skills-practice ledger, not the product spec.** Term Rush is two
+things at once: a real product idea (grade understanding, schedule review — see
+[README](../README.md)) and a vehicle for demonstrating job-market skills the
+product's actual problem size doesn't demand on its own (ADR-0001). This file
+tracks the second axis. [`docs/roadmap.md`](./roadmap.md) tracks the first —
+each shipped phase there is tagged **Product** or **Skills-practice** so it's
+never ambiguous which reason a given piece of infrastructure exists for. A row
+here with no product need is not a smell; it's the point — see "Deliberate
+omissions" below for the mirror case (skills deliberately *not* practiced).
+
 **Status vocabulary:**
 
 | Status | Meaning |
@@ -31,7 +41,7 @@ doesn't exist until the linked phase starts.
 | --- | --- | --- |
 | REST, domain-language endpoints | ⏳ P1 | `api/routers/` — `POST /sessions/{id}/answers/submit`, never `/api/process` |
 | OpenAPI → generated TS client | ⏳ P1 | CI step; API drift breaks the frontend build |
-| gRPC | ⏳ P3 | `game-service` → `content-service` term lookup. Chosen for this hop specifically: high-frequency, internal, schema-first, latency-sensitive — the case where gRPC beats REST rather than merely differs from it. ADR-0009. |
+| gRPC | ✅ P3 | `game-service` → `content-service` term lookup. Chosen for this hop specifically: high-frequency, internal, schema-first, latency-sensitive — the case where gRPC beats REST rather than merely differs from it. ADR-0009. |
 | GraphQL BFF | ⏳ P3 | Strawberry. One query replacing 3 REST round-trips for the session screen — measured, not asserted. ADR-0010. |
 
 **The point to make in an interview:** three protocols, three *reasons*. REST for the
@@ -54,7 +64,7 @@ using one.
 | Facet | Status | Where |
 | --- | --- | --- |
 | Relational modeling | ⏳ P1 | Postgres: sessions, answers, FSRS card states. Normalized, FK-constrained, indexed on real query patterns. |
-| Term selection strategy | ⏸️ Deferred | `game_service/domain/review_priority.py` — weakness-driven priority scoring (`TermPerformance`, `priority()`) exists but is unwired; no use case calls it yet. Early scaffolding for spaced repetition (README roadmap), not integrated into `GetRandomTerm`'s random-pick-with-exclusion (session-scoped, not weakness-scored) today. |
+| Term selection strategy | ⏳ Planned | Weakness-driven priority scoring (spaced repetition, FSRS-style) — not started. Today `GetRandomTerm` is session-scoped exclusion only, not weakness-scored. |
 | Migrations | ⏳ P1 | Alembic, expand-contract for anything destructive |
 | NoSQL | ⏸️ Deferred | Plan was MongoDB for term knowledge objects (deeply nested, variable-shaped, read-heavy — a real document fit). content-service shipped on Postgres instead (JSON column) when the split landed — simpler, one less datastore to operate, and the access pattern turned out not to need document flexibility yet. Revisit if term objects grow genuinely variable-shaped. |
 | Vector store | ⏳ P3 | pgvector for semantic term similarity + RAG retrieval. Deliberately *not* a separate vector DB — see ADR-0012. |

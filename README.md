@@ -7,7 +7,7 @@ vehicle, not the deliverable. Scope and infrastructure choices are sized for tha
 (see [ADR-0001](./docs/adr/0001-record-architecture-decisions.md)), not for a
 minimal shipping product.
 
-**Status:** Phase 1a–1f complete. Phase 2 (LLM-based grading) not yet started.
+**Status:** Phase 1–3a complete. Phase 3b in progress (Kafka event log done, GraphQL BFF pending).
 
 ## Backend (Phase 1)
 
@@ -88,8 +88,9 @@ inventory.
   them over gRPC, verified end-to-end.
 - **Phase 3b:** Kafka event log, GraphQL BFF. Kafka done: `game-service`
   publishes `AnswerGraded`, `content-service` publishes `TermPublished`,
-  consumed in-process to invalidate the gRPC term cache. GraphQL BFF not
-  started.
+  consumed in-process to invalidate the gRPC term cache. Consumer supervised
+  for auto-restart on crash with backoff; `/ready` degrades when consumer is
+  unhealthy (see ADR-0011). GraphQL BFF not started.
 - **Phase 4:** GCP deployment (Cloud Run), AWS modules (reviewable), Kubernetes (local kind)
   — done when the app runs on a real cloud target, reachable over HTTPS.
 - **Phase 5:** Documentation and technical narrative
