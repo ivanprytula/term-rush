@@ -179,6 +179,16 @@ run-all: up
 web port="5173":
     cd services/web && npm run dev -- --port {{port}}
 
+# Regenerate services/web's TS client from game-service's live OpenAPI schema.
+# Commit the result; CI's web-client-drift job fails if it's out of sync.
+generate-client:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    PYTHONPATH=services/game uv run python -c \
+        "from game_service.api.app import app; import json; print(json.dumps(app.openapi()))" \
+        > services/web/openapi.json
+    cd services/web && npm run generate-client
+
 # Playwright browser UI tests (mocked backend, not full-stack e2e — no
 # game-service/Postgres needed; see services/web/README.md).
 web-test-ui:

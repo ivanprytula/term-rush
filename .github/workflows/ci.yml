@@ -41,3 +41,37 @@ jobs:
 
       - name: Run architecture checks and tests
         run: just arch test
+
+  web-build:
+    name: Web build (client generation + typecheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      - name: Install just
+        uses: extractions/setup-just@e33e0265a09d6d736e2ee1e0eb685ef1de4669ff # v3.0.0
+
+      - name: Install workspace
+        run: uv sync --all-packages --locked
+
+      - name: Install web dependencies
+        run: cd services/web && npm ci
+
+      # src/client/ is gitignored (generated, not committed) — this job is the
+      # thing that actually proves game-service's OpenAPI schema and the
+      # frontend still agree. `tsc -b` in the build step fails on any type
+      # drift between the two.
+      - name: Generate client from live OpenAPI schema and build
+        run: |
+          just generate-client
+          cd services/web && npm run build

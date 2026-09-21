@@ -39,8 +39,8 @@ doesn't exist until the linked phase starts.
 
 | Facet | Status | Where |
 | --- | --- | --- |
-| REST, domain-language endpoints | ⏳ P1 | `api/routers/` — `POST /sessions/{id}/answers/submit`, never `/api/process` |
-| OpenAPI → generated TS client | ⏳ P1 | CI step; API drift breaks the frontend build |
+| REST, domain-language endpoints | ✅ P1 | `api/routers/` — `POST /game-rounds/{id}/answers/submit`, never `/api/process` |
+| OpenAPI → generated TS client | ✅ P1 | `just generate-client`; CI's `web-build` job regenerates from the live schema and runs `tsc -b` — API drift fails the build |
 | gRPC | ✅ P3 | `game-service` → `content-service` term lookup. Chosen for this hop specifically: high-frequency, internal, schema-first, latency-sensitive — the case where gRPC beats REST rather than merely differs from it. ADR-0009. |
 | GraphQL BFF | ⏳ P3 | Strawberry. One query replacing 3 REST round-trips for the session screen — measured, not asserted. ADR-0010. |
 
@@ -74,9 +74,9 @@ using one.
 
 | Facet | Status | Where |
 | --- | --- | --- |
-| Containers | ⏳ P1 | Multi-stage Dockerfiles, non-root user, pinned base digests |
-| Compose (daily driver) | ⏳ P1 | `make up`, profiles so you can skip the observability stack |
-| CI pipeline | ⏳ P1 | ruff, ty, import-linter, pytest, vitest, playwright |
+| Containers | ✅ P1 | Multi-stage `services/game/Dockerfile`, non-root `USER app`, `curl`-based healthcheck. Pinned base digests still open — tag only today. |
+| Compose (daily driver) | ✅ P1 | `just up` / `just run-all`; healthchecks on postgres, game, content. No observability-stack profile to skip yet — nothing to skip until P2 ships it. |
+| CI pipeline | 🟡 P1 | `.github/workflows/ci.yml`: ruff, ty, import-linter, pytest. No frontend test job yet — Playwright (`just web-test-ui`) runs locally only, and there's no vitest (no frontend unit-test framework). |
 | Secrets management | ⏳ P1 | `.env.example` only in git; Secret Manager in cloud; **no secrets as CLI args** |
 | DNS / HTTPS / TLS | ⏳ P4 | Managed cert on Cloud Run, custom domain, HSTS. The 80/20. |
 | Kubernetes | ⏳ P1→P4 | Helm + kind from P1, cloud overlays in P4. See ADR-0015 (kind over k3s/minikube). |
@@ -97,7 +97,7 @@ using one.
 
 | Facet | Status | Where |
 | --- | --- | --- |
-| Structured logging | ⏳ P1 | JSON, correlation IDs, no PII, no secrets |
+| Structured logging | ✅ P1 | `infrastructure/logging.py` — JSON formatter, OTel trace/span injection, redacted-fields set (answer, password, token, secret, ...) |
 | Metrics | ⏳ P2 | Prometheus: RED on HTTP, grading latency by `matched_via`, LLM cost per session |
 | Traces | ⏳ P2 | OTel across api → celery → llm. The multi-hop trace is the demo. |
 | Dashboards + alerts | ⏳ P4 | Grafana, with SLOs that have error budgets rather than vibes |

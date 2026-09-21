@@ -1,7 +1,15 @@
 # PRD: Sprint mode
 
-- **Tag:** Both — <!-- Product: timed rounds are core to the learning-product vision (engagement, urgency). Skills-practice: real-time game loop, server-vs-client state split, currently ⏳ P1 unbuilt rows in skills-map.md. -->
-- **Status:** In review — scope closed, ready for implementation planning
+- **Tag:** Both —
+  <!-- Product: timed rounds are core to the learning-product vision
+  (engagement, urgency). Skills-practice: real-time game loop,
+  server-vs-client state split, currently ⏳ P1 unbuilt rows in
+  skills-map.md. -->
+- **Status:** Shipped — backend (`RoundMode`, timer fields, expiry
+  rejection, LLM-grading suppression) and frontend (mode toggle,
+  requestAnimationFrame countdown, time's-up screen) both merged; see
+  [docs/ports-and-adapters.md](ports-and-adapters.md) for the request
+  trace and PR #7.
 
 ## Problem
 
