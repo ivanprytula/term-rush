@@ -14,7 +14,7 @@ from game_service.api.dependencies import get_answer_evaluator
 from game_service.api.dependencies import get_llm_grader
 from game_service.api.dependencies import get_unit_of_work
 from game_service.api.schemas import ErrorResponse
-from game_service.api.schemas import SessionIdPath
+from game_service.api.schemas import RoundIdPath
 from game_service.api.schemas import SubmitAnswerRequest
 from game_service.api.schemas import SubmitAnswerResponse
 from game_service.api.schemas import SubmitAnswerStreamEvent
@@ -25,11 +25,11 @@ from game_service.domain.graders import AnswerEvaluator
 from game_service.domain.llm_grader import LLMRubricGrader
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/sessions", tags=["answers"])
+router = APIRouter(prefix="/game-rounds", tags=["answers"])
 
 
 @router.post(
-    "/{session_id}/answers/submit",
+    "/{round_id}/answers/submit",
     response_model=SubmitAnswerResponse,
     status_code=status.HTTP_200_OK,
     responses={
@@ -39,7 +39,7 @@ router = APIRouter(prefix="/sessions", tags=["answers"])
     },
 )
 async def submit_answer(
-    session_id: SessionIdPath,
+    round_id: RoundIdPath,
     payload: SubmitAnswerRequest,
     uow: UnitOfWork = Depends(get_unit_of_work),
     evaluator: AnswerEvaluator = Depends(get_answer_evaluator),
@@ -48,7 +48,7 @@ async def submit_answer(
     """Submit an answer for grading.
 
     Returns the grade outcome with rubric breakdown and feedback. The answer
-    is recorded against the session; identical answers are cached. Offensive
+    is recorded against the round; identical answers are cached. Offensive
     answers are rejected before any correctness check runs. Grading is
     deterministic by default; PARTIAL verdicts additionally escalate to the
     LLM rubric judge when use_llm_grading is set and the server has one
@@ -57,7 +57,7 @@ async def submit_answer(
     use_case = SubmitAnswer(uow, evaluator=evaluator, llm_grader=llm_grader)
     try:
         outcome = await use_case.execute(
-            session_id, payload.term_id, payload.answer, payload.use_llm_grading
+            round_id, payload.term_id, payload.answer, payload.use_llm_grading
         )
         return SubmitAnswerResponse.from_outcome(outcome)
     except ValueError as exc:
@@ -66,7 +66,7 @@ async def submit_answer(
 
 
 @router.post(
-    "/{session_id}/answers/submit/stream",
+    "/{round_id}/answers/submit/stream",
     responses={
         404: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
@@ -74,7 +74,7 @@ async def submit_answer(
     },
 )
 async def submit_answer_stream(
-    session_id: SessionIdPath,
+    round_id: RoundIdPath,
     payload: SubmitAnswerRequest,
     uow: UnitOfWork = Depends(get_unit_of_work),
     evaluator: AnswerEvaluator = Depends(get_answer_evaluator),
@@ -98,7 +98,7 @@ async def submit_answer_stream(
     async def event_generator() -> AsyncIterator[dict[str, str]]:
         try:
             async for event in use_case.execute(
-                session_id, payload.term_id, payload.answer, payload.use_llm_grading
+                round_id, payload.term_id, payload.answer, payload.use_llm_grading
             ):
                 sse_event = SubmitAnswerStreamEvent.from_stream_event(event)
                 yield {"event": sse_event.event, "data": sse_event.data}

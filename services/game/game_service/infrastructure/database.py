@@ -28,14 +28,14 @@ class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
-class SessionModel(Base):
-    """Session entity in the database (stored as JSON for flexibility).
+class GameRoundModel(Base):
+    """GameRound entity in the database (stored as JSON for flexibility).
 
-    Column length: worst case is SESSION_MAX_ANSWERS answers at max field
+    Column length: worst case is ROUND_MAX_ANSWERS answers at max field
     lengths, ~37KB serialized; 65536 leaves headroom without another migration.
     """
 
-    __tablename__ = "sessions"
+    __tablename__ = "game_rounds"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     data: Mapped[str] = mapped_column(String(65536), nullable=False)

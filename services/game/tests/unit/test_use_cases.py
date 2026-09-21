@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 import pytest
 
 from game_service.application.use_cases import GetRandomTerm
-from game_service.application.use_cases import GetSession
+from game_service.application.use_cases import GetRound
 from game_service.application.use_cases import SubmitAnswer
 from game_service.application.use_cases import SubmitAnswerStreaming
 from game_service.domain.llm_grader import LLMJudgment
@@ -43,7 +43,7 @@ def uow() -> InMemoryUnitOfWork:
 async def test_submit_answer_exact_match(uow: InMemoryUnitOfWork) -> None:
     """Grading an exact answer returns CORRECT."""
     use_case = SubmitAnswer(uow)
-    outcome = await use_case.execute("session-1", "uow", "Unit of Work")
+    outcome = await use_case.execute("round-1", "uow", "Unit of Work")
     assert outcome.verdict is Verdict.CORRECT
 
 
@@ -51,8 +51,8 @@ async def test_submit_answer_exact_match(uow: InMemoryUnitOfWork) -> None:
 async def test_submit_answer_caches_result(uow: InMemoryUnitOfWork) -> None:
     """Second call with same answer hits cache."""
     use_case = SubmitAnswer(uow)
-    outcome1 = await use_case.execute("session-1", "uow", "Unit of Work")
-    outcome2 = await use_case.execute("session-1", "uow", "Unit of Work")
+    outcome1 = await use_case.execute("round-1", "uow", "Unit of Work")
+    outcome2 = await use_case.execute("round-1", "uow", "Unit of Work")
     assert outcome1.verdict is outcome2.verdict
 
 
@@ -60,7 +60,7 @@ async def test_submit_answer_caches_result(uow: InMemoryUnitOfWork) -> None:
 async def test_submit_answer_publishes_event(uow: InMemoryUnitOfWork) -> None:
     """Grading publishes an AnswerGraded event."""
     use_case = SubmitAnswer(uow)
-    await use_case.execute("session-1", "uow", "Unit of Work")
+    await use_case.execute("round-1", "uow", "Unit of Work")
     from game_service.infrastructure.memory import InMemoryEventPublisher
 
     events = uow.events
@@ -78,68 +78,68 @@ async def test_submit_answer_term_not_found(uow: InMemoryUnitOfWork) -> None:
     """Grading a nonexistent term raises ValueError."""
     use_case = SubmitAnswer(uow)
     with pytest.raises(ValueError, match="not found"):
-        await use_case.execute("session-1", "nonexistent", "anything")
+        await use_case.execute("round-1", "nonexistent", "anything")
 
 
 @pytest.mark.asyncio
-async def test_submit_answer_creates_session_on_first_call(
+async def test_submit_answer_creates_round_on_first_call(
     uow: InMemoryUnitOfWork,
 ) -> None:
-    """A session is created and the answer recorded on first submission."""
+    """A round is created and the answer recorded on first submission."""
     use_case = SubmitAnswer(uow)
-    await use_case.execute("session-1", "uow", "Unit of Work")
+    await use_case.execute("round-1", "uow", "Unit of Work")
 
-    session = await uow.sessions.by_id("session-1")
-    assert session is not None
-    assert len(session.answers) == 1
-    assert session.answers[0].term_id == "uow"
-    assert session.answers[0].verdict is Verdict.CORRECT
+    round_ = await uow.rounds.by_id("round-1")
+    assert round_ is not None
+    assert len(round_.answers) == 1
+    assert round_.answers[0].term_id == "uow"
+    assert round_.answers[0].verdict is Verdict.CORRECT
 
 
 @pytest.mark.asyncio
-async def test_submit_answer_appends_to_existing_session(
+async def test_submit_answer_appends_to_existing_round(
     uow: InMemoryUnitOfWork,
 ) -> None:
-    """A second submission in the same session appends, not replaces."""
+    """A second submission in the same round appends, not replaces."""
     use_case = SubmitAnswer(uow)
-    await use_case.execute("session-1", "uow", "Unit of Work")
-    await use_case.execute("session-1", "uow", "wrong answer")
+    await use_case.execute("round-1", "uow", "Unit of Work")
+    await use_case.execute("round-1", "uow", "wrong answer")
 
-    session = await uow.sessions.by_id("session-1")
-    assert session is not None
-    assert len(session.answers) == 2
-
-
-@pytest.mark.asyncio
-async def test_get_session_returns_recorded_answers(uow: InMemoryUnitOfWork) -> None:
-    """Fetching a session returns what SubmitAnswer recorded."""
-    await SubmitAnswer(uow).execute("session-1", "uow", "Unit of Work")
-
-    session = await GetSession(uow).execute("session-1")
-    assert session.id == "session-1"
-    assert len(session.answers) == 1
-    assert session.answers[0].term_id == "uow"
+    round_ = await uow.rounds.by_id("round-1")
+    assert round_ is not None
+    assert len(round_.answers) == 2
 
 
 @pytest.mark.asyncio
-async def test_get_session_not_found(uow: InMemoryUnitOfWork) -> None:
-    """Fetching a nonexistent session raises ValueError."""
+async def test_get_round_returns_recorded_answers(uow: InMemoryUnitOfWork) -> None:
+    """Fetching a round returns what SubmitAnswer recorded."""
+    await SubmitAnswer(uow).execute("round-1", "uow", "Unit of Work")
+
+    round_ = await GetRound(uow).execute("round-1")
+    assert round_.id == "round-1"
+    assert len(round_.answers) == 1
+    assert round_.answers[0].term_id == "uow"
+
+
+@pytest.mark.asyncio
+async def test_get_round_not_found(uow: InMemoryUnitOfWork) -> None:
+    """Fetching a nonexistent round raises ValueError."""
     with pytest.raises(ValueError, match="not found"):
-        await GetSession(uow).execute("nonexistent")
+        await GetRound(uow).execute("nonexistent")
 
 
 @pytest.mark.asyncio
 async def test_submit_answer_records_cached_outcome_again(
     uow: InMemoryUnitOfWork,
 ) -> None:
-    """A cache hit still appends a new SubmittedAnswer to the session."""
+    """A cache hit still appends a new SubmittedAnswer to the round."""
     use_case = SubmitAnswer(uow)
-    await use_case.execute("session-1", "uow", "Unit of Work")
-    await use_case.execute("session-1", "uow", "Unit of Work")
+    await use_case.execute("round-1", "uow", "Unit of Work")
+    await use_case.execute("round-1", "uow", "Unit of Work")
 
-    session = await uow.sessions.by_id("session-1")
-    assert session is not None
-    assert len(session.answers) == 2
+    round_ = await uow.rounds.by_id("round-1")
+    assert round_ is not None
+    assert len(round_.answers) == 2
 
 
 @pytest.mark.asyncio
@@ -200,7 +200,7 @@ async def test_submit_answer_escalates_on_partial_when_opted_in(
     use_case = SubmitAnswer(uow, llm_grader=llm_grader)
 
     outcome = await use_case.execute(
-        "session-1", "uow", "work of the unit thing", use_llm_grading=True
+        "round-1", "uow", "work of the unit thing", use_llm_grading=True
     )
 
     assert outcome.matched_via is MatchedVia.LLM_RUBRIC
@@ -218,7 +218,7 @@ async def test_submit_answer_ignores_llm_grader_without_opt_in(
     llm_grader = LLMRubricGrader(FakeJudgePort(judgment=judgment))
     use_case = SubmitAnswer(uow, llm_grader=llm_grader)
 
-    outcome = await use_case.execute("session-1", "uow", "work of the unit thing")
+    outcome = await use_case.execute("round-1", "uow", "work of the unit thing")
 
     assert outcome.matched_via is MatchedVia.FUZZY
     assert outcome.verdict is Verdict.PARTIAL
@@ -238,7 +238,7 @@ async def test_submit_answer_skips_llm_grader_when_not_partial(
     use_case = SubmitAnswer(uow, llm_grader=llm_grader)
 
     outcome = await use_case.execute(
-        "session-1", "uow", "Unit of Work", use_llm_grading=True
+        "round-1", "uow", "Unit of Work", use_llm_grading=True
     )
 
     assert outcome.matched_via is MatchedVia.EXACT
@@ -255,7 +255,7 @@ async def test_submit_answer_falls_back_when_llm_grader_fails(
     use_case = SubmitAnswer(uow, llm_grader=llm_grader)
 
     outcome = await use_case.execute(
-        "session-1", "uow", "work of the unit thing", use_llm_grading=True
+        "round-1", "uow", "work of the unit thing", use_llm_grading=True
     )
 
     assert outcome.matched_via is MatchedVia.FUZZY
@@ -277,7 +277,7 @@ async def test_submit_answer_falls_back_on_a_bug_in_the_llm_path(
     use_case = SubmitAnswer(uow, llm_grader=llm_grader)
 
     outcome = await use_case.execute(
-        "session-1", "uow", "work of the unit thing", use_llm_grading=True
+        "round-1", "uow", "work of the unit thing", use_llm_grading=True
     )
 
     assert outcome.matched_via is MatchedVia.FUZZY
@@ -294,7 +294,7 @@ async def test_submit_answer_propagates_cancellation(uow: InMemoryUnitOfWork) ->
 
     with pytest.raises(asyncio.CancelledError):
         await use_case.execute(
-            "session-1", "uow", "work of the unit thing", use_llm_grading=True
+            "round-1", "uow", "work of the unit thing", use_llm_grading=True
         )
 
 
@@ -304,7 +304,7 @@ async def test_submit_answer_without_llm_grader_stays_deterministic(
 ) -> None:
     """No llm_grader configured: behaviour is unchanged even with opt-in."""
     outcome = await SubmitAnswer(uow).execute(
-        "session-1", "uow", "work of the unit thing", use_llm_grading=True
+        "round-1", "uow", "work of the unit thing", use_llm_grading=True
     )
     assert outcome.matched_via is MatchedVia.FUZZY
 
@@ -327,7 +327,7 @@ async def test_streaming_yields_deltas_then_one_graded_event_on_escalation(
     events = [
         event
         async for event in use_case.execute(
-            "session-1", "uow", "work of the unit thing", use_llm_grading=True
+            "round-1", "uow", "work of the unit thing", use_llm_grading=True
         )
     ]
 
@@ -354,7 +354,7 @@ async def test_streaming_yields_only_graded_event_when_not_escalating(
     events = [
         event
         async for event in use_case.execute(
-            "session-1", "uow", "Unit of Work", use_llm_grading=True
+            "round-1", "uow", "Unit of Work", use_llm_grading=True
         )
     ]
 
@@ -377,7 +377,7 @@ async def test_streaming_yields_only_graded_event_on_cache_hit(
 
     # First call grades fresh (escalates, populates the cache).
     async for _ in SubmitAnswerStreaming(uow, llm_grader=llm_grader).execute(
-        "session-1", "uow", "work of the unit thing", use_llm_grading=True
+        "round-1", "uow", "work of the unit thing", use_llm_grading=True
     ):
         pass
 
@@ -385,7 +385,7 @@ async def test_streaming_yields_only_graded_event_on_cache_hit(
     events = [
         event
         async for event in SubmitAnswerStreaming(uow, llm_grader=llm_grader).execute(
-            "session-2", "uow", "work of the unit thing", use_llm_grading=True
+            "round-2", "uow", "work of the unit thing", use_llm_grading=True
         )
     ]
 
@@ -413,7 +413,7 @@ async def test_streaming_falls_back_to_deterministic_on_llm_failure(
     events = [
         event
         async for event in use_case.execute(
-            "session-1", "uow", "work of the unit thing", use_llm_grading=True
+            "round-1", "uow", "work of the unit thing", use_llm_grading=True
         )
     ]
 
@@ -424,24 +424,24 @@ async def test_streaming_falls_back_to_deterministic_on_llm_failure(
 
 
 @pytest.mark.asyncio
-async def test_streaming_persists_to_session(uow: InMemoryUnitOfWork) -> None:
-    """The final graded outcome is recorded against the session, same as
+async def test_streaming_persists_to_round(uow: InMemoryUnitOfWork) -> None:
+    """The final graded outcome is recorded against the round, same as
     the non-streaming path.
     """
     use_case = SubmitAnswerStreaming(uow)
 
-    async for _ in use_case.execute("session-1", "uow", "Unit of Work"):
+    async for _ in use_case.execute("round-1", "uow", "Unit of Work"):
         pass
 
-    session = await uow.sessions.by_id("session-1")
-    assert session is not None
-    assert len(session.answers) == 1
-    assert session.answers[0].verdict is Verdict.CORRECT
+    round_ = await uow.rounds.by_id("round-1")
+    assert round_ is not None
+    assert len(round_.answers) == 1
+    assert round_.answers[0].verdict is Verdict.CORRECT
 
 
 @pytest.mark.asyncio
 async def test_streaming_term_not_found(uow: InMemoryUnitOfWork) -> None:
     use_case = SubmitAnswerStreaming(uow)
     with pytest.raises(ValueError, match="not found"):
-        async for _ in use_case.execute("session-1", "nonexistent", "anything"):
+        async for _ in use_case.execute("round-1", "nonexistent", "anything"):
             pass

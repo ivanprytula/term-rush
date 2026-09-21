@@ -12,9 +12,9 @@ from opentelemetry.baggage import set_baggage
 from game_service.api import dependencies
 from game_service.api.dependencies import _init_session_factory
 from game_service.api.routers import answers
-from game_service.api.routers import sessions
+from game_service.api.routers import game_rounds
 from game_service.api.routers import terms
-from game_service.domain.session import SessionFull
+from game_service.domain.round import RoundFull
 from game_service.infrastructure.logging import configure_logging
 from game_service.infrastructure.term_cache_invalidator import stop_consumer_task
 
@@ -64,7 +64,7 @@ async def inject_task_name(request: Request, call_next):
 
 
 app.include_router(answers.router)
-app.include_router(sessions.router)
+app.include_router(game_rounds.router)
 app.include_router(terms.router)
 
 
@@ -109,10 +109,10 @@ async def value_error_handler(_request: Request, exc: ValueError) -> JSONRespons
     )
 
 
-@app.exception_handler(SessionFull)
-async def session_full_handler(_request: Request, _exc: SessionFull) -> JSONResponse:
-    """A session that has reached its answer limit is a client-side error."""
+@app.exception_handler(RoundFull)
+async def round_full_handler(_request: Request, _exc: RoundFull) -> JSONResponse:
+    """A round that has reached its answer limit is a client-side error."""
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        content={"error": "Session has reached its answer limit", "status_code": 422},
+        content={"error": "Round has reached its answer limit", "status_code": 422},
     )

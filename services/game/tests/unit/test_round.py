@@ -1,4 +1,4 @@
-"""Session domain entity tests."""
+"""GameRound domain entity tests."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from pydantic import ValidationError
 from game_service.domain import constants
 from game_service.domain.outcome import MatchedVia
 from game_service.domain.outcome import Verdict
-from game_service.domain.session import Session
-from game_service.domain.session import SessionFull
-from game_service.domain.session import SubmittedAnswer
+from game_service.domain.round import GameRound
+from game_service.domain.round import RoundFull
+from game_service.domain.round import SubmittedAnswer
 
 
 @pytest.fixture
@@ -30,26 +30,26 @@ def answer() -> SubmittedAnswer:
 def test_record_appends_without_mutating_original(
     answer: SubmittedAnswer,
 ) -> None:
-    session = Session(id="s1", created_at=datetime.now(UTC))
+    round_ = GameRound(id="s1", created_at=datetime.now(UTC))
 
-    updated = session.record(answer)
+    updated = round_.record(answer)
 
-    assert session.answers == ()
+    assert round_.answers == ()
     assert updated.answers == (answer,)
 
 
 def test_record_preserves_existing_answers(answer: SubmittedAnswer) -> None:
-    session = Session(id="s1", created_at=datetime.now(UTC), answers=(answer,))
+    round_ = GameRound(id="s1", created_at=datetime.now(UTC), answers=(answer,))
 
     second = answer.model_copy(update={"term_id": "idempotent"})
-    updated = session.record(second)
+    updated = round_.record(second)
 
     assert updated.answers == (answer, second)
 
 
-def test_session_rejects_id_over_max_length() -> None:
+def test_round_rejects_id_over_max_length() -> None:
     with pytest.raises(ValidationError):
-        Session(id="s" * 65, created_at=datetime.now(UTC))
+        GameRound(id="s" * 65, created_at=datetime.now(UTC))
 
 
 def test_submitted_answer_rejects_score_out_of_bounds() -> None:
@@ -63,12 +63,12 @@ def test_submitted_answer_rejects_score_out_of_bounds() -> None:
         )
 
 
-def test_record_raises_session_full_at_max_answers(answer: SubmittedAnswer) -> None:
-    full = Session(
+def test_record_raises_round_full_at_max_answers(answer: SubmittedAnswer) -> None:
+    full = GameRound(
         id="s1",
         created_at=datetime.now(UTC),
-        answers=(answer,) * constants.SESSION_MAX_ANSWERS,
+        answers=(answer,) * constants.ROUND_MAX_ANSWERS,
     )
 
-    with pytest.raises(SessionFull):
+    with pytest.raises(RoundFull):
         full.record(answer)

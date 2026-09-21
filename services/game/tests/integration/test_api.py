@@ -82,9 +82,9 @@ def test_ready_degrades_when_consumer_is_stale(client: TestClient) -> None:
 
 
 def test_submit_answer_exact_match(client_with_uow_term: TestClient) -> None:
-    """POST /sessions/{id}/answers/submit with exact match returns CORRECT."""
+    """POST /game-rounds/{id}/answers/submit with exact match returns CORRECT."""
     response = client_with_uow_term.post(
-        "/sessions/s1/answers/submit",
+        "/game-rounds/s1/answers/submit",
         json={
             "term_id": "uow",
             "answer": "Unit of Work",
@@ -102,7 +102,7 @@ def test_submit_answer_offensive_answer_is_flagged(
     api.dependencies.get_answer_evaluator, not just build_deterministic_evaluator).
     """
     response = client_with_uow_term.post(
-        "/sessions/s1/answers/submit",
+        "/game-rounds/s1/answers/submit",
         json={"term_id": "uow", "answer": "fuck this game"},
     )
     assert response.status_code == 200
@@ -118,7 +118,7 @@ def test_submit_answer_stream_exact_match(client_with_uow_term: TestClient) -> N
     """
     with client_with_uow_term.stream(
         "POST",
-        "/sessions/s1/answers/submit/stream",
+        "/game-rounds/s1/answers/submit/stream",
         json={"term_id": "uow", "answer": "Unit of Work"},
     ) as response:
         assert response.status_code == 200
@@ -139,7 +139,7 @@ def test_submit_answer_stream_term_not_found(
     """
     with client_with_uow_term.stream(
         "POST",
-        "/sessions/s1/answers/submit/stream",
+        "/game-rounds/s1/answers/submit/stream",
         json={"term_id": "nonexistent", "answer": "anything"},
     ) as response:
         assert response.status_code == 200
@@ -151,7 +151,7 @@ def test_submit_answer_stream_term_not_found(
 def test_submit_answer_missing_term_id(client: TestClient) -> None:
     """POST with missing term_id returns 422."""
     response = client.post(
-        "/sessions/s1/answers/submit",
+        "/game-rounds/s1/answers/submit",
         json={
             "answer": "Unit of Work",
         },
@@ -162,7 +162,7 @@ def test_submit_answer_missing_term_id(client: TestClient) -> None:
 def test_submit_answer_missing_answer(client: TestClient) -> None:
     """POST with missing answer returns 422."""
     response = client.post(
-        "/sessions/s1/answers/submit",
+        "/game-rounds/s1/answers/submit",
         json={
             "term_id": "uow",
         },
@@ -173,7 +173,7 @@ def test_submit_answer_missing_answer(client: TestClient) -> None:
 def test_submit_answer_empty_term_id(client: TestClient) -> None:
     """POST with empty term_id returns 422."""
     response = client.post(
-        "/sessions/s1/answers/submit",
+        "/game-rounds/s1/answers/submit",
         json={
             "term_id": "",
             "answer": "Unit of Work",
@@ -185,7 +185,7 @@ def test_submit_answer_empty_term_id(client: TestClient) -> None:
 def test_submit_answer_empty_answer(client: TestClient) -> None:
     """POST with empty answer returns 422."""
     response = client.post(
-        "/sessions/s1/answers/submit",
+        "/game-rounds/s1/answers/submit",
         json={
             "term_id": "uow",
             "answer": "",
@@ -194,20 +194,20 @@ def test_submit_answer_empty_answer(client: TestClient) -> None:
     assert response.status_code == 422
 
 
-def test_get_session_not_found(client_with_uow_term: TestClient) -> None:
-    """GET /sessions/{id} for a session that never submitted returns 404."""
-    response = client_with_uow_term.get("/sessions/never-existed")
+def test_get_round_not_found(client_with_uow_term: TestClient) -> None:
+    """GET /game-rounds/{id} for a round that never submitted returns 404."""
+    response = client_with_uow_term.get("/game-rounds/never-existed")
     assert response.status_code == 404
 
 
-def test_get_session_after_submit(client_with_uow_term: TestClient) -> None:
-    """GET /sessions/{id} reflects a prior submission in the same session."""
+def test_get_round_after_submit(client_with_uow_term: TestClient) -> None:
+    """GET /game-rounds/{id} reflects a prior submission in the same round."""
     client_with_uow_term.post(
-        "/sessions/s1/answers/submit",
+        "/game-rounds/s1/answers/submit",
         json={"term_id": "uow", "answer": "Unit of Work"},
     )
 
-    response = client_with_uow_term.get("/sessions/s1")
+    response = client_with_uow_term.get("/game-rounds/s1")
 
     assert response.status_code == 200
     body = response.json()

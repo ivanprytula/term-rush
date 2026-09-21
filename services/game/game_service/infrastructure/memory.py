@@ -8,11 +8,11 @@ from typing import Any
 
 from game_service.application.ports import EventPublisher
 from game_service.application.ports import GradeCache
-from game_service.application.ports import SessionRepository
+from game_service.application.ports import RoundRepository
 from game_service.application.ports import TermRepository
 from game_service.application.ports import UnitOfWork
 from game_service.domain.outcome import GradeOutcome
-from game_service.domain.session import Session
+from game_service.domain.round import GameRound
 from game_service.domain.term import Term
 
 
@@ -32,17 +32,17 @@ class InMemoryTermRepository(TermRepository):
         return random.choice(candidates or list(self.terms.values()))
 
 
-class InMemorySessionRepository(SessionRepository):
-    """Store sessions in a dict. Does not survive a process restart."""
+class InMemoryRoundRepository(RoundRepository):
+    """Store rounds in a dict. Does not survive a process restart."""
 
-    def __init__(self, sessions: dict[str, Session] | None = None) -> None:
-        self.sessions = sessions or {}
+    def __init__(self, rounds: dict[str, GameRound] | None = None) -> None:
+        self.rounds = rounds or {}
 
-    async def by_id(self, session_id: str) -> Session | None:
-        return self.sessions.get(session_id)
+    async def by_id(self, round_id: str) -> GameRound | None:
+        return self.rounds.get(round_id)
 
-    async def save(self, session: Session) -> None:
-        self.sessions[session.id] = session
+    async def save(self, round_: GameRound) -> None:
+        self.rounds[round_.id] = round_
 
 
 class InMemoryGradeCache(GradeCache):
@@ -79,11 +79,11 @@ class InMemoryUnitOfWork(UnitOfWork):
     def __init__(
         self,
         terms: dict[str, Term] | None = None,
-        sessions: dict[str, Session] | None = None,
+        rounds: dict[str, GameRound] | None = None,
         grade_cache: GradeCache | None = None,
     ) -> None:
         self.terms = InMemoryTermRepository(terms)
-        self.sessions = InMemorySessionRepository(sessions)
+        self.rounds = InMemoryRoundRepository(rounds)
         self.grade_cache = (
             grade_cache if grade_cache is not None else InMemoryGradeCache()
         )
