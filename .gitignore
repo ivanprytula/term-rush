@@ -44,3 +44,9 @@ services/web/src/client/
 .impeccable/
 
 .vscode/
+
+# Playwright
+services/web/test-results/
+services/web/playwright-report/
+services/web/blob-report/
+services/web/playwright/.cache/

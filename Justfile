@@ -168,6 +168,11 @@ dev-all:
 web port="5173":
     cd services/web && npm run dev -- --port {{port}}
 
+# Playwright browser UI tests (mocked backend, not full-stack e2e — no
+# game-service/Postgres needed; see services/web/README.md).
+web-test-ui:
+    cd services/web && npm run test:ui
+
 # Interactive web UI to browse content-service's gRPC contract and fire test calls.
 # brew install grpcurl grpcui   # or: go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
 # # list services
