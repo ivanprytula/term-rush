@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Generator
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +14,8 @@ from fastapi.testclient import TestClient
 from game_service.api import dependencies
 from game_service.api.app import app
 from game_service.api.dependencies import get_unit_of_work
+from game_service.domain.round import GameRound
+from game_service.domain.round import RoundMode
 from game_service.domain.term import Category
 from game_service.domain.term import Difficulty
 from game_service.domain.term import Term
@@ -50,6 +56,32 @@ def client_with_uow_term() -> Generator[TestClient]:
     app.dependency_overrides[get_unit_of_work] = override_get_unit_of_work
     with TestClient(app) as client:
         yield client
+    app.dependency_overrides.pop(get_unit_of_work, None)
+
+
+@pytest.fixture
+def client_and_uow() -> Generator[tuple[TestClient, InMemoryUnitOfWork]]:
+    """Same override as client_with_uow_term, but also exposes the
+    InMemoryUnitOfWork so a test can inject a round directly (e.g. an
+    already-expired Sprint round no HTTP call could produce without
+    sleeping)."""
+    term = Term(
+        id="uow",
+        term="UoW",
+        expansion="Unit of Work",
+        definitions=(
+            "Pattern that groups related changes into one transactional unit.",
+        ),
+        categories=(Category(slug="architecture"),),
+    )
+    uow = InMemoryUnitOfWork(terms={"uow": term})
+
+    async def override_get_unit_of_work():
+        yield uow
+
+    app.dependency_overrides[get_unit_of_work] = override_get_unit_of_work
+    with TestClient(app) as client:
+        yield client, uow
     app.dependency_overrides.pop(get_unit_of_work, None)
 
 
@@ -210,6 +242,48 @@ def test_create_round_ids_are_distinct(client_with_uow_term: TestClient) -> None
     second = client_with_uow_term.post("/game-rounds").json()
 
     assert first["id"] != second["id"]
+
+
+def test_create_round_sprint_returns_mode_and_remaining_seconds(
+    client_with_uow_term: TestClient,
+) -> None:
+    """POST /game-rounds with mode=sprint surfaces the countdown."""
+    response = client_with_uow_term.post(
+        "/game-rounds", json={"mode": "sprint", "duration_seconds": 30}
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["mode"] == "sprint"
+    assert body["remaining_seconds"] == pytest.approx(30.0, abs=1.0)
+
+
+def test_create_round_classic_has_no_remaining_seconds(
+    client_with_uow_term: TestClient,
+) -> None:
+    """Classic (the default) has no countdown."""
+    response = client_with_uow_term.post("/game-rounds")
+
+    body = response.json()
+    assert body["mode"] == "classic"
+    assert body["remaining_seconds"] is None
+
+
+def test_submit_answer_rejects_expired_sprint_round(
+    client_and_uow: tuple[TestClient, InMemoryUnitOfWork],
+) -> None:
+    """Submitting to a Sprint round past its deadline returns 422."""
+    client, uow = client_and_uow
+    started = datetime.now(UTC) - timedelta(seconds=61)
+    expired = GameRound.start(started, mode=RoundMode.SPRINT, duration_seconds=60)
+    asyncio.run(uow.rounds.save(expired))
+
+    response = client.post(
+        f"/game-rounds/{expired.id}/answers/submit",
+        json={"term_id": "uow", "answer": "Unit of Work"},
+    )
+
+    assert response.status_code == 422
 
 
 def test_get_round_not_found(client_with_uow_term: TestClient) -> None:

@@ -15,6 +15,7 @@ from game_service.api.routers import answers
 from game_service.api.routers import game_rounds
 from game_service.api.routers import leaderboard
 from game_service.api.routers import terms
+from game_service.domain.round import RoundExpired
 from game_service.domain.round import RoundFull
 from game_service.infrastructure.logging import configure_logging
 from game_service.infrastructure.term_cache_invalidator import stop_consumer_task
@@ -117,4 +118,13 @@ async def round_full_handler(_request: Request, _exc: RoundFull) -> JSONResponse
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={"error": "Round has reached its answer limit", "status_code": 422},
+    )
+
+
+@app.exception_handler(RoundExpired)
+async def round_expired_handler(_request: Request, _exc: RoundExpired) -> JSONResponse:
+    """A Sprint round's timer has run out — reject further answers."""
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={"error": "Round has expired", "status_code": 422},
     )

@@ -113,7 +113,8 @@ async def test_save_upsert_updates_total_score(session: AsyncSession) -> None:
             score=20,
             matched_via=MatchedVia.EXACT,
             submitted_at=datetime.now(UTC),
-        )
+        ),
+        datetime.now(UTC),
     )
     await repo.save(updated)
     await session.commit()

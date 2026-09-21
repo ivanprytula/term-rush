@@ -20,6 +20,7 @@ from game_service.domain.outcome import StreamEvent
 from game_service.domain.outcome import StreamEventKind
 from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
+from game_service.domain.round import RoundMode
 from game_service.domain.round import SubmittedAnswer
 from game_service.domain.term import Term
 
@@ -61,16 +62,21 @@ class SubmitAnswer:
 
         use_llm_grading: player opt-in. Only escalates when the deterministic
         chain returns PARTIAL and an llm_grader is configured; ignored
-        otherwise.
+        otherwise. Always ignored in Sprint mode — SSE latency works against
+        a timed mode's point (see docs/prd-sprint-mode.md).
 
         Events (for Phase 2/3): AnswerGraded published on commit.
         """
         answer_hash = sha256(answer.encode()).hexdigest()
 
         async with self.uow:
+            round_ = await self.uow.rounds.by_id(round_id)
+            if round_ is not None and round_.mode is RoundMode.SPRINT:
+                use_llm_grading = False
+
             cached = await self.uow.grade_cache.get(term_id, answer_hash)
             if cached is not None:
-                return await self.record(round_id, term_id, cached)
+                return await self.record(round_id, term_id, cached, round_)
 
             term = await self.uow.terms.by_id(term_id)
             if term is None:
@@ -87,15 +93,23 @@ class SubmitAnswer:
             ):
                 outcome = await self._try_llm_grade(answer, term, outcome)
 
-            return await self.persist(round_id, term_id, answer, outcome)
+            return await self.persist(round_id, term_id, answer, outcome, round_)
 
     async def persist(
-        self, round_id: str, term_id: str, answer: str, outcome: GradeOutcome
+        self,
+        round_id: str,
+        term_id: str,
+        answer: str,
+        outcome: GradeOutcome,
+        round_: GameRound | None = None,
     ) -> GradeOutcome:
         """Cache a freshly graded outcome, publish AnswerGraded, and record
         it against the round. Public: SubmitAnswerStreaming (which grades
         outside this use case) calls this directly instead of execute() to
         avoid re-grading and duplicating persistence logic.
+
+        round_, if already fetched by the caller, is reused instead of a
+        second by_id lookup.
 
         Must run inside `async with self.uow:` — the caller owns that scope,
         since execute() and the streaming path enter it at different points.
@@ -112,18 +126,30 @@ class SubmitAnswer:
                 "matched_via": outcome.matched_via.value,
             },
         )
-        return await self.record(round_id, term_id, outcome)
+        return await self.record(round_id, term_id, outcome, round_)
 
     async def record(
-        self, round_id: str, term_id: str, outcome: GradeOutcome
+        self,
+        round_id: str,
+        term_id: str,
+        outcome: GradeOutcome,
+        round_: GameRound | None = None,
     ) -> GradeOutcome:
         """Append outcome to the round (cached or freshly graded). Public
         for the same reason as persist() — SubmitAnswerStreaming's cache-hit
         path calls this directly.
+
+        round_, if already fetched by the caller, is reused instead of a
+        second by_id lookup.
+
+        Raises:
+            RoundExpired: the round is a Sprint round whose timer expired.
         """
-        round_ = await self.uow.rounds.by_id(round_id)
+        now = datetime.now(UTC)
         if round_ is None:
-            round_ = GameRound(id=round_id, created_at=datetime.now(UTC))
+            round_ = await self.uow.rounds.by_id(round_id)
+        if round_ is None:
+            round_ = GameRound(id=round_id, created_at=now)
 
         round_ = round_.record(
             SubmittedAnswer(
@@ -131,8 +157,9 @@ class SubmitAnswer:
                 verdict=outcome.verdict,
                 score=outcome.score,
                 matched_via=outcome.matched_via,
-                submitted_at=datetime.now(UTC),
-            )
+                submitted_at=now,
+            ),
+            now,
         )
         await self.uow.rounds.save(round_)
         return outcome
@@ -202,9 +229,15 @@ class SubmitAnswerStreaming:
         answer_hash = sha256(answer.encode()).hexdigest()
 
         async with self.uow:
+            round_ = await self.uow.rounds.by_id(round_id)
+            if round_ is not None and round_.mode is RoundMode.SPRINT:
+                use_llm_grading = False
+
             cached = await self.uow.grade_cache.get(term_id, answer_hash)
             if cached is not None:
-                outcome = await self._submit_answer.record(round_id, term_id, cached)
+                outcome = await self._submit_answer.record(
+                    round_id, term_id, cached, round_
+                )
                 yield StreamEvent.graded(outcome)
                 return
 
@@ -227,7 +260,7 @@ class SubmitAnswerStreaming:
                         outcome = event.outcome
 
             final = await self._submit_answer.persist(
-                round_id, term_id, answer, outcome
+                round_id, term_id, answer, outcome, round_
             )
             yield StreamEvent.graded(final)
 
@@ -260,10 +293,15 @@ class CreateGameRound:
     def __init__(self, uow: UnitOfWork) -> None:
         self.uow = uow
 
-    async def execute(self) -> GameRound:
-        """Mint a new round and persist it."""
+    async def execute(
+        self,
+        mode: RoundMode = RoundMode.CLASSIC,
+        duration_seconds: int | None = None,
+    ) -> GameRound:
+        """Mint a new round and persist it. duration_seconds is ignored
+        outside Sprint mode."""
         async with self.uow:
-            round_ = GameRound.start(datetime.now(UTC))
+            round_ = GameRound.start(datetime.now(UTC), mode, duration_seconds)
             await self.uow.rounds.save(round_)
             return round_
 
