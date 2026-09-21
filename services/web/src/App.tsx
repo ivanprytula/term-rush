@@ -1,23 +1,23 @@
 import { useEffect, useState } from "react";
 import {
   getRandomTermTermsRandomGet,
-  submitAnswerSessionsSessionIdAnswersSubmitPost,
+  submitAnswerGameRoundsRoundIdAnswersSubmitPost,
 } from "./client";
 import type { SubmitAnswerResponse, TermPromptResponse } from "./client";
 import { submitAnswerStream } from "./submitAnswerStream";
 
-const SESSION_ID_KEY = "term-rush-session-id";
+const ROUND_ID_KEY = "term-rush-round-id";
 const THEME_KEY = "term-rush-theme";
 const ROUND_LENGTH = 10;
 
 const THEMES = ["phosphor", "devtool", "synthwave"] as const;
 type Theme = (typeof THEMES)[number];
 
-function getOrCreateSessionId(): string {
-  const existing = localStorage.getItem(SESSION_ID_KEY);
+function getOrCreateRoundId(): string {
+  const existing = localStorage.getItem(ROUND_ID_KEY);
   if (existing) return existing;
   const created = crypto.randomUUID();
-  localStorage.setItem(SESSION_ID_KEY, created);
+  localStorage.setItem(ROUND_ID_KEY, created);
   return created;
 }
 
@@ -224,7 +224,7 @@ function HowToPlay() {
 type AppError = { message: string; retryAction: "load" | "submit" };
 
 export default function App() {
-  const [sessionId] = useState(getOrCreateSessionId);
+  const [roundId] = useState(getOrCreateRoundId);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [term, setTerm] = useState<TermPromptResponse | null>(null);
   const [answer, setAnswer] = useState("");
@@ -253,7 +253,7 @@ export default function App() {
     setAnswer("");
     setLiveFeedback(null);
     const { data } = await getRandomTermTermsRandomGet({
-      query: { session_id: sessionId },
+      query: { round_id: roundId },
     });
     // The generated client can return a falsy `error` (e.g. "") on some
     // failure shapes, so check for a real response body instead of
@@ -300,7 +300,7 @@ export default function App() {
     if (useLlmGrading) {
       setLiveFeedback("");
       await submitAnswerStream(
-        sessionId,
+        roundId,
         { term_id: term.id, answer, use_llm_grading: true },
         {
           onRationaleDelta: (text) =>
@@ -319,8 +319,8 @@ export default function App() {
       return;
     }
 
-    const { data } = await submitAnswerSessionsSessionIdAnswersSubmitPost({
-      path: { session_id: sessionId },
+    const { data } = await submitAnswerGameRoundsRoundIdAnswersSubmitPost({
+      path: { round_id: roundId },
       body: { term_id: term.id, answer },
     });
     setLoading(false);
