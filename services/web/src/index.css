@@ -30,7 +30,7 @@
   --color-amber: var(--theme-amber);
 }
 
-/* Three palettes, one shape. Every pairing is checked against its own
+/* Six palettes, one shape. Every pairing is checked against its own
    --theme-ground at ≥4.5:1 (body text) — see the note on each muted color,
    the one value close enough to the line to need it spelled out.
    --theme-accent is the one hue each world spends on state (verdicts,
@@ -74,14 +74,53 @@
   --theme-amber: #ffb700; /* 10.9:1, partial verdict only */
 }
 
+[data-theme="solarized"] {
+  /* Solarized Light (Ethan Schoonover) — the set's one light theme. */
+  --theme-ground: #fdf6e3; /* base3 */
+  --theme-surface: #eee8d5; /* base2 */
+  --theme-surface-border: #d3cbb7; /* darkened from base1 for a visible edge on base2 */
+  --theme-text: #073642; /* base02 — 11.9:1 */
+  --theme-text-dim: #586e75; /* base01 — 6.5:1 */
+  --theme-text-muted: #6c7d80; /* darkened from base0 (3.8:1) to clear 4.5:1 */
+  --theme-accent: #268bd2; /* blue — 4.6:1, this world's one accent */
+  --theme-accent-dim: #1e6a9e; /* hover/pressed */
+  --theme-amber: #b58900; /* yellow, darkened for AA on base3 — 4.6:1, partial verdict only */
+}
+
+[data-theme="high-contrast"] {
+  /* Pure black/white, maximal ratios everywhere — a11y-first, no hue reliance. */
+  --theme-ground: #000000;
+  --theme-surface: #0a0a0a;
+  --theme-surface-border: #6b6b6b; /* 5.4:1 against ground, a real edge not a hint */
+  --theme-text: #ffffff; /* 21:1 */
+  --theme-text-dim: #d9d9d9; /* 17.1:1 */
+  --theme-text-muted: #b3b3b3; /* 10.4:1 — well clear of AA */
+  --theme-accent: #ffff00; /* yellow — 19.6:1, this world's one accent */
+  --theme-accent-dim: #cccc00; /* hover/pressed */
+  --theme-amber: #00ffff; /* cyan, distinct from accent — 16.7:1, partial verdict only */
+}
+
+[data-theme="nord"] {
+  /* Nord (Arctic Ninja) — slate-blue grays, one frost cyan accent. */
+  --theme-ground: #2e3440; /* nord0 */
+  --theme-surface: #3b4252; /* nord1 */
+  --theme-surface-border: #4c566a; /* nord3 */
+  --theme-text: #eceff4; /* nord6 — 14.9:1 */
+  --theme-text-dim: #d8dee9; /* nord4 — 12.4:1 */
+  --theme-text-muted: #9aa5b8; /* lightened from nord4's dim for 4.5:1+ on nord0 */
+  --theme-accent: #88c0d0; /* nord8 frost — 9.6:1, this world's one accent */
+  --theme-accent-dim: #5e9cb0; /* hover/pressed */
+  --theme-amber: #ebcb8b; /* nord13 — 12.5:1, partial verdict only */
+}
+
 @layer base {
   body {
     background-color: var(--color-ground);
     color: var(--color-text);
     font-family: var(--font-mono);
     /* Faint scanline texture — reads as a CRT trait in the phosphor world
-       and as a quiet grid/scan trait in the other two; never a decorative
-       add-on unrelated to any of the three worlds. */
+       and as a quiet grid/scan trait elsewhere; never a decorative add-on
+       unrelated to the theme underneath it. */
     background-image: repeating-linear-gradient(
       to bottom,
       rgb(255 255 255 / 0.012) 0px,

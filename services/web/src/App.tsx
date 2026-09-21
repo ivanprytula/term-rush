@@ -11,7 +11,14 @@ import { useSprintCountdown } from "./useSprintCountdown";
 const THEME_KEY = "term-rush-theme";
 const ROUND_LENGTH = 10;
 
-const THEMES = ["phosphor", "devtool", "synthwave"] as const;
+const THEMES = [
+  "phosphor",
+  "devtool",
+  "synthwave",
+  "solarized",
+  "high-contrast",
+  "nord",
+] as const;
 type Theme = (typeof THEMES)[number];
 
 // index.html's inline pre-paint script already set data-theme on <html>
@@ -27,19 +34,24 @@ function getInitialTheme(): Theme {
 
 function ThemeToggle({
   theme,
-  onCycle,
+  onChange,
 }: {
   theme: Theme;
-  onCycle: () => void;
+  onChange: (theme: Theme) => void;
 }) {
   return (
-    <button
-      onClick={onCycle}
-      aria-label={`Switch theme (currently ${theme})`}
-      className="fixed top-4 right-4 text-xs text-text-muted hover:text-text border border-surface-border hover:border-phosphor px-2 py-1 transition"
+    <select
+      value={theme}
+      onChange={(e) => onChange(e.target.value as Theme)}
+      aria-label="Switch theme"
+      className="fixed top-4 right-4 text-xs text-text-muted hover:text-text border border-surface-border hover:border-phosphor px-2 py-1 transition bg-surface"
     >
-      {theme}
-    </button>
+      {THEMES.map((t) => (
+        <option key={t} value={t}>
+          {t}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -305,10 +317,6 @@ export default function App() {
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
-  const cycleTheme = () => {
-    setTheme((prev) => THEMES[(THEMES.indexOf(prev) + 1) % THEMES.length]);
-  };
-
   const finishGrading = (data: SubmitAnswerResponse) => {
     setResult(data);
     setAnswers((prev) => [...prev, data]);
@@ -368,7 +376,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-ground text-text flex items-center justify-center p-4">
-      <ThemeToggle theme={theme} onCycle={cycleTheme} />
+      <ThemeToggle theme={theme} onChange={setTheme} />
       <main className="w-full max-w-md space-y-6">
         <h1 className="text-2xl font-bold tracking-tight text-center">
           <span className="text-phosphor">~/</span>term-rush
