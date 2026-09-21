@@ -21,6 +21,7 @@ from game_service.domain.outcome import StreamEventKind
 from game_service.domain.round import GameRound
 from game_service.domain.round import RoundMode
 from game_service.domain.term import Term
+from game_service.domain.term_stats import TermStats
 
 RoundIdPath = Annotated[str, Path(min_length=1, max_length=constants.ROUND_ID_MAX_LEN)]
 
@@ -34,6 +35,11 @@ RoundIdQuery = Annotated[
 LeaderboardLimitQuery = Annotated[
     int,
     Query(ge=constants.LEADERBOARD_MIN_LIMIT, le=constants.LEADERBOARD_MAX_LIMIT),
+]
+
+TermIdPath = Annotated[
+    str,
+    Path(min_length=constants.TERM_ID_MIN_LEN, max_length=constants.TERM_ID_MAX_LEN),
 ]
 
 
@@ -241,6 +247,42 @@ class TermPromptResponse(BaseModel):
     def from_term(term: Term) -> TermPromptResponse:
         """Convert a Term to a prompt response."""
         return TermPromptResponse(id=term.id, term=term.term)
+
+
+class TermStatsResponse(BaseModel):
+    """Observed difficulty for one term (ADR-0011: the AnswerGraded
+    consumer). observed_difficulty is null until the term has at least one
+    graded answer — distinct from a 404, which means the term itself
+    doesn't exist.
+    """
+
+    term_id: str
+    correct_count: int
+    partial_count: int
+    incorrect_count: int
+    observed_difficulty: float | None
+
+    @staticmethod
+    def from_stats(stats: TermStats) -> TermStatsResponse:
+        """Convert a TermStats to a response."""
+        return TermStatsResponse(
+            term_id=stats.term_id,
+            correct_count=stats.correct_count,
+            partial_count=stats.partial_count,
+            incorrect_count=stats.incorrect_count,
+            observed_difficulty=stats.observed_difficulty,
+        )
+
+    @staticmethod
+    def empty(term_id: str) -> TermStatsResponse:
+        """No answer has been graded for this term yet."""
+        return TermStatsResponse(
+            term_id=term_id,
+            correct_count=0,
+            partial_count=0,
+            incorrect_count=0,
+            observed_difficulty=None,
+        )
 
 
 class ErrorResponse(BaseModel):

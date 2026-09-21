@@ -10,10 +10,13 @@ from game_service.application.ports import EventPublisher
 from game_service.application.ports import GradeCache
 from game_service.application.ports import RoundRepository
 from game_service.application.ports import TermRepository
+from game_service.application.ports import TermStatsRepository
 from game_service.application.ports import UnitOfWork
 from game_service.domain.outcome import GradeOutcome
+from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
 from game_service.domain.term import Term
+from game_service.domain.term_stats import TermStats
 
 
 class InMemoryTermRepository(TermRepository):
@@ -63,6 +66,20 @@ class InMemoryGradeCache(GradeCache):
         if term_id not in self.cache:
             self.cache[term_id] = {}
         self.cache[term_id][answer_hash] = outcome
+
+
+class InMemoryTermStatsRepository(TermStatsRepository):
+    """Tally verdicts in a dict. Does not survive a process restart."""
+
+    def __init__(self) -> None:
+        self.stats: dict[str, TermStats] = {}
+
+    async def get(self, term_id: str) -> TermStats | None:
+        return self.stats.get(term_id)
+
+    async def record(self, term_id: str, verdict: Verdict) -> None:
+        current = self.stats.get(term_id) or TermStats(term_id=term_id)
+        self.stats[term_id] = current.with_verdict(verdict)
 
 
 class InMemoryEventPublisher(EventPublisher):

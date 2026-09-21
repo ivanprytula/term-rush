@@ -47,6 +47,21 @@ class GameRoundModel(Base):
     )
 
 
+class TermStatsModel(Base):
+    """Verdict tally for one term (ADR-0011: the AnswerGraded consumer).
+
+    Columnar, not a JSON blob like GameRoundModel: three counters keyed by
+    term_id is genuinely tabular, no leaderboard-style sort to denormalize for.
+    """
+
+    __tablename__ = "term_stats"
+
+    term_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    correct_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    partial_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    incorrect_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
 async def create_db_engine(database_url: str) -> tuple[Any, Any]:
     """Create async engine and session factory.
 

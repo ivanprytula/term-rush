@@ -10,8 +10,10 @@ from abc import ABC
 from abc import abstractmethod
 
 from game_service.domain.outcome import GradeOutcome
+from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
 from game_service.domain.term import Term
+from game_service.domain.term_stats import TermStats
 
 
 class TermRepository(ABC):
@@ -57,6 +59,21 @@ class GradeCache(ABC):
     @abstractmethod
     async def put(self, term_id: str, answer_hash: str, outcome: GradeOutcome) -> None:
         """Store an outcome."""
+
+
+class TermStatsRepository(ABC):
+    """Accumulate observed grading outcomes per term (ADR-0011: the
+    AnswerGraded consumer). Not a UnitOfWork member: written by the Kafka
+    consumer, outside any request's transaction, and read by a standalone
+    stats endpoint — the same shared-instance shape as GrpcTermRepository."""
+
+    @abstractmethod
+    async def get(self, term_id: str) -> TermStats | None:
+        """Fetch the tally for a term. None if no answer has been graded yet."""
+
+    @abstractmethod
+    async def record(self, term_id: str, verdict: Verdict) -> None:
+        """Tally one more graded answer against the term."""
 
 
 class EventPublisher(ABC):
