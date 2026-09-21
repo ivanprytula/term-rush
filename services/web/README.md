@@ -20,7 +20,8 @@ regenerate `src/client/`:
 
 ```bash
 cd ../.. && PYTHONPATH=services/game uv run python -c \
-  "from api.app import app; import json; print(json.dumps(app.openapi()))" \
+  "from game_service.api.app import app; import json
+print(json.dumps(app.openapi()))" \
   > services/web/openapi.json
 cd services/web && npm run generate-client
 ```

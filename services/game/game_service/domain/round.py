@@ -6,6 +6,7 @@ a GameRound is the append-only log that ties many outcomes to one player's run.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -42,6 +43,11 @@ class GameRound(BaseModel):
     id: str = Field(max_length=constants.ROUND_ID_MAX_LEN)
     created_at: datetime
     answers: tuple[SubmittedAnswer, ...] = ()
+
+    @staticmethod
+    def start(now: datetime) -> GameRound:
+        """Begin a new round with a server-minted id."""
+        return GameRound(id=uuid.uuid4().hex, created_at=now)
 
     @property
     def total_score(self) -> int:

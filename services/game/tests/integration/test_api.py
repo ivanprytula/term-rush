@@ -194,6 +194,24 @@ def test_submit_answer_empty_answer(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_create_round_mints_an_id(client_with_uow_term: TestClient) -> None:
+    """POST /game-rounds returns a fresh round with a server-minted id."""
+    response = client_with_uow_term.post("/game-rounds")
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["id"]
+    assert body["answers"] == []
+
+
+def test_create_round_ids_are_distinct(client_with_uow_term: TestClient) -> None:
+    """Two POSTs mint two different round ids."""
+    first = client_with_uow_term.post("/game-rounds").json()
+    second = client_with_uow_term.post("/game-rounds").json()
+
+    assert first["id"] != second["id"]
+
+
 def test_get_round_not_found(client_with_uow_term: TestClient) -> None:
     """GET /game-rounds/{id} for a round that never submitted returns 404."""
     response = client_with_uow_term.get("/game-rounds/never-existed")

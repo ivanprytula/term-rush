@@ -13,10 +13,25 @@ from game_service.api.schemas import ErrorResponse
 from game_service.api.schemas import RoundIdPath
 from game_service.api.schemas import RoundResponse
 from game_service.application.ports import UnitOfWork
+from game_service.application.use_cases import CreateGameRound
 from game_service.application.use_cases import GetRound
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/game-rounds", tags=["game-rounds"])
+
+
+@router.post(
+    "",
+    response_model=RoundResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={500: {"model": ErrorResponse}},
+)
+async def create_round(
+    uow: UnitOfWork = Depends(get_unit_of_work),
+) -> RoundResponse:
+    """Start a new round. The server mints the round id."""
+    round_ = await CreateGameRound(uow).execute()
+    return RoundResponse.from_round(round_)
 
 
 @router.get(

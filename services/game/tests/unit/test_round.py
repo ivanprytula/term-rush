@@ -63,6 +63,16 @@ def test_submitted_answer_rejects_score_out_of_bounds() -> None:
         )
 
 
+def test_start_mints_a_fresh_id() -> None:
+    now = datetime.now(UTC)
+    first = GameRound.start(now)
+    second = GameRound.start(now)
+
+    assert first.id != second.id
+    assert first.created_at == now
+    assert first.answers == ()
+
+
 def test_total_score_sums_answers(answer: SubmittedAnswer) -> None:
     second = answer.model_copy(update={"term_id": "leaderboard", "score": 45})
     round_ = GameRound(id="s1", created_at=datetime.now(UTC), answers=(answer, second))

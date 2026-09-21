@@ -254,6 +254,20 @@ class SubmitAnswerStreaming:
             )
 
 
+class CreateGameRound:
+    """Start a new round."""
+
+    def __init__(self, uow: UnitOfWork) -> None:
+        self.uow = uow
+
+    async def execute(self) -> GameRound:
+        """Mint a new round and persist it."""
+        async with self.uow:
+            round_ = GameRound.start(datetime.now(UTC))
+            await self.uow.rounds.save(round_)
+            return round_
+
+
 class GetRound:
     """Fetch a round's recorded answers."""
 

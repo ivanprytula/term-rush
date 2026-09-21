@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 
+from game_service.application.use_cases import CreateGameRound
 from game_service.application.use_cases import GetRandomTerm
 from game_service.application.use_cases import GetRound
 from game_service.application.use_cases import SubmitAnswer
@@ -108,6 +109,25 @@ async def test_submit_answer_appends_to_existing_round(
     round_ = await uow.rounds.by_id("round-1")
     assert round_ is not None
     assert len(round_.answers) == 2
+
+
+@pytest.mark.asyncio
+async def test_create_game_round_mints_and_persists(uow: InMemoryUnitOfWork) -> None:
+    """Creating a round mints an id and saves an empty round under it."""
+    round_ = await CreateGameRound(uow).execute()
+
+    assert round_.answers == ()
+    stored = await uow.rounds.by_id(round_.id)
+    assert stored == round_
+
+
+@pytest.mark.asyncio
+async def test_create_game_round_mints_distinct_ids(uow: InMemoryUnitOfWork) -> None:
+    """Two calls produce two distinct rounds."""
+    first = await CreateGameRound(uow).execute()
+    second = await CreateGameRound(uow).execute()
+
+    assert first.id != second.id
 
 
 @pytest.mark.asyncio

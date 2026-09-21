@@ -1,25 +1,17 @@
 import { useEffect, useState } from "react";
 import {
+  createRoundGameRoundsPost,
   getRandomTermTermsRandomGet,
   submitAnswerGameRoundsRoundIdAnswersSubmitPost,
 } from "./client";
 import type { SubmitAnswerResponse, TermPromptResponse } from "./client";
 import { submitAnswerStream } from "./submitAnswerStream";
 
-const ROUND_ID_KEY = "term-rush-round-id";
 const THEME_KEY = "term-rush-theme";
 const ROUND_LENGTH = 10;
 
 const THEMES = ["phosphor", "devtool", "synthwave"] as const;
 type Theme = (typeof THEMES)[number];
-
-function getOrCreateRoundId(): string {
-  const existing = localStorage.getItem(ROUND_ID_KEY);
-  if (existing) return existing;
-  const created = crypto.randomUUID();
-  localStorage.setItem(ROUND_ID_KEY, created);
-  return created;
-}
 
 // index.html's inline pre-paint script already set data-theme on <html>
 // from localStorage (or left it unset, meaning "phosphor" via :root's
@@ -224,7 +216,10 @@ function HowToPlay() {
 type AppError = { message: string; retryAction: "load" | "submit" };
 
 export default function App() {
-  const [roundId] = useState(getOrCreateRoundId);
+  // Null until POST /game-rounds returns — the server mints the id, so
+  // there's nothing to read synchronously the way a client-generated
+  // UUID allowed before.
+  const [roundId, setRoundId] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [term, setTerm] = useState<TermPromptResponse | null>(null);
   const [answer, setAnswer] = useState("");
@@ -247,13 +242,13 @@ export default function App() {
 
   const roundComplete = answers.length >= ROUND_LENGTH;
 
-  const loadTerm = async () => {
+  const loadTerm = async (activeRoundId: string) => {
     setError(null);
     setResult(null);
     setAnswer("");
     setLiveFeedback(null);
     const { data } = await getRandomTermTermsRandomGet({
-      query: { round_id: roundId },
+      query: { round_id: activeRoundId },
     });
     // The generated client can return a falsy `error` (e.g. "") on some
     // failure shapes, so check for a real response body instead of
@@ -265,13 +260,27 @@ export default function App() {
     setTerm(data);
   };
 
+  // Starts a round server-side and loads its first term. Used both on
+  // mount and on "play again" — each is a genuinely new round, not a
+  // continuation, so both mint a fresh id rather than reusing one.
+  const startRound = async () => {
+    setError(null);
+    const { data } = await createRoundGameRoundsPost();
+    if (!data) {
+      setError({ message: "Could not start a round.", retryAction: "load" });
+      return;
+    }
+    setRoundId(data.id);
+    await loadTerm(data.id);
+  };
+
   const startNewRound = () => {
     setAnswers([]);
-    loadTerm();
+    startRound();
   };
 
   useEffect(() => {
-    loadTerm();
+    startRound();
   }, []);
 
   useEffect(() => {
@@ -292,7 +301,9 @@ export default function App() {
   };
 
   const submitAnswer = async () => {
-    if (!term || !answer.trim()) return;
+    // roundId is set by the time a term is on screen — startRound() always
+    // loads a term after minting the round, never in either order.
+    if (!term || !answer.trim() || !roundId) return;
     setLoading(true);
     setError(null);
     setRequestedLlmGrading(useLlmGrading);
@@ -365,7 +376,13 @@ export default function App() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                (error.retryAction === "load" ? loadTerm : submitAnswer)();
+                if (error.retryAction === "submit") {
+                  submitAnswer();
+                } else if (roundId) {
+                  loadTerm(roundId);
+                } else {
+                  startRound();
+                }
               }}
             >
               <button
@@ -427,7 +444,11 @@ export default function App() {
             requestedLlmGrading={requestedLlmGrading}
             streamedFeedback={liveFeedback}
             continueLabel={roundComplete ? "see results" : "next term"}
-            onContinue={roundComplete ? () => setResult(null) : loadTerm}
+            onContinue={
+              roundComplete
+                ? () => setResult(null)
+                : () => roundId && loadTerm(roundId)
+            }
           />
         )}
 
