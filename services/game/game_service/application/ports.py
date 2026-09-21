@@ -42,6 +42,10 @@ class RoundRepository(ABC):
     async def save(self, round_: GameRound) -> None:
         """Create or replace a round."""
 
+    @abstractmethod
+    async def top_by_score(self, limit: int) -> list[GameRound]:
+        """Fetch the top `limit` rounds ordered by total_score descending."""
+
 
 class GradeCache(ABC):
     """Cache grading outcomes to avoid redundant LLM calls."""

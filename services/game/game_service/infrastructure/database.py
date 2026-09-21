@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import Integer
 from sqlalchemy import MetaData
 from sqlalchemy import String
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +40,11 @@ class GameRoundModel(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     data: Mapped[str] = mapped_column(String(65536), nullable=False)
+    # Denormalized from data (SubmittedAnswer.score sum) so the leaderboard
+    # can sort in SQL instead of deserializing every row's JSON in Python.
+    total_score: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, index=True
+    )
 
 
 async def create_db_engine(database_url: str) -> tuple[Any, Any]:

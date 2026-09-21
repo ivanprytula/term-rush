@@ -44,6 +44,11 @@ class InMemoryRoundRepository(RoundRepository):
     async def save(self, round_: GameRound) -> None:
         self.rounds[round_.id] = round_
 
+    async def top_by_score(self, limit: int) -> list[GameRound]:
+        """Not supported: the leaderboard query is a SQL-index demonstration,
+        not a feature this adapter needs to fake."""
+        raise NotImplementedError("Leaderboard requires the SQL adapter")
+
 
 class InMemoryGradeCache(GradeCache):
     """Cache grading outcomes in a nested dict: term_id -> answer_hash -> outcome."""
