@@ -8,8 +8,12 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from game_service.application.ports import RoundRepository
+from game_service.application.ports import TermStatsRepository
+from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
+from game_service.domain.term_stats import TermStats
 from game_service.infrastructure.database import GameRoundModel
+from game_service.infrastructure.database import TermStatsModel
 
 
 class SQLRoundRepository(RoundRepository):
@@ -51,3 +55,34 @@ class SQLRoundRepository(RoundRepository):
         )
         result = await self.session.execute(stmt)
         return [GameRound.model_validate_json(m.data) for m in result.scalars()]
+
+
+class SQLTermStatsRepository(TermStatsRepository):
+    """Persist per-term verdict tallies to PostgreSQL."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get(self, term_id: str) -> TermStats | None:
+        stmt = select(TermStatsModel).where(TermStatsModel.term_id == term_id)
+        result = await self.session.execute(stmt)
+        model = result.scalars().first()
+        if not model:
+            return None
+        return TermStats(
+            term_id=model.term_id,
+            correct_count=model.correct_count,
+            partial_count=model.partial_count,
+            incorrect_count=model.incorrect_count,
+        )
+
+    async def record(self, term_id: str, verdict: Verdict) -> None:
+        """Upsert-increment in one statement: concurrent consumers tallying
+        the same term must not lose an update to a read-modify-write race."""
+        column = f"{verdict.value}_count"
+        stmt = insert(TermStatsModel).values(term_id=term_id, **{column: 1})
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["term_id"],
+            set_={column: getattr(TermStatsModel, column) + 1},
+        )
+        await self.session.execute(stmt)

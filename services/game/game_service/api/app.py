@@ -17,6 +17,9 @@ from game_service.api.routers import leaderboard
 from game_service.api.routers import terms
 from game_service.domain.round import RoundExpired
 from game_service.domain.round import RoundFull
+from game_service.infrastructure.answer_graded_stats import (
+    stop_consumer_task as stop_stats_consumer_task,
+)
 from game_service.infrastructure.logging import configure_logging
 from game_service.infrastructure.term_cache_invalidator import stop_consumer_task
 
@@ -43,6 +46,12 @@ async def lifespan(_app: FastAPI):
         if dependencies._kafka_consumer is not None:
             await dependencies._kafka_consumer.stop()
             logger.info("Kafka consumer stopped")
+        if dependencies._stats_consumer_task is not None:
+            await stop_stats_consumer_task(dependencies._stats_consumer_task)
+            logger.info("Answer-graded stats consumer task stopped")
+        if dependencies._stats_consumer is not None:
+            await dependencies._stats_consumer.stop()
+            logger.info("Answer-graded stats consumer stopped")
         if dependencies._grpc_channel is not None:
             await dependencies._grpc_channel.close()
             logger.info("gRPC channel closed")
@@ -81,14 +90,21 @@ def health() -> dict[str, str]:
 def ready() -> dict[str, str]:
     """Readiness: safe to route traffic.
 
-    Never hard-fails on the Kafka consumer: a stale/dead consumer means
-    term cache invalidation has degraded to the 300s TTL fallback, not
-    that the service can't serve requests. Surfaced as a status string
-    so it's visible without gating traffic.
+    Never hard-fails on either Kafka consumer: a stale/dead term-cache
+    invalidator means cache invalidation has degraded to the 300s TTL
+    fallback; a stale/dead stats consumer means term difficulty stats stop
+    updating. Neither means the service can't serve requests. Surfaced as
+    a status string so it's visible without gating traffic. Checked in
+    this order so the pre-existing term_cache_invalidator_stale contract
+    (see test_ready_degrades_when_consumer_is_stale) is unaffected by
+    adding a second consumer.
     """
     health = dependencies.get_consumer_health()
     if health is not None and health.is_stale():
         return {"status": "degraded", "reason": "term_cache_invalidator_stale"}
+    stats_health = dependencies.get_stats_consumer_health()
+    if stats_health is not None and stats_health.is_stale():
+        return {"status": "degraded", "reason": "answer_graded_stats_consumer_stale"}
     return {"status": "ready"}
 
 

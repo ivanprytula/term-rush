@@ -13,12 +13,15 @@ from fastapi.testclient import TestClient
 
 from game_service.api import dependencies
 from game_service.api.app import app
+from game_service.api.dependencies import get_term_stats_repository
 from game_service.api.dependencies import get_unit_of_work
+from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
 from game_service.domain.round import RoundMode
 from game_service.domain.term import Category
 from game_service.domain.term import Difficulty
 from game_service.domain.term import Term
+from game_service.infrastructure.memory import InMemoryTermStatsRepository
 from game_service.infrastructure.memory import InMemoryUnitOfWork
 from game_service.infrastructure.term_cache_invalidator import ConsumerHealth
 
@@ -111,6 +114,22 @@ def test_ready_degrades_when_consumer_is_stale(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "degraded"
+    assert response.json()["reason"] == "term_cache_invalidator_stale"
+
+
+def test_ready_degrades_when_stats_consumer_is_stale(client: TestClient) -> None:
+    """A dead answer-graded stats consumer degrades readiness, never fails it."""
+    stale_health = ConsumerHealth()
+    stale_health.last_alive_at -= 100.0
+    dependencies._stats_consumer_health = stale_health
+    try:
+        response = client.get("/ready")
+    finally:
+        dependencies._stats_consumer_health = None
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "degraded"
+    assert response.json()["reason"] == "answer_graded_stats_consumer_stale"
 
 
 def test_submit_answer_exact_match(client_with_uow_term: TestClient) -> None:
@@ -307,3 +326,89 @@ def test_get_round_after_submit(client_with_uow_term: TestClient) -> None:
     assert len(body["answers"]) == 1
     assert body["answers"][0]["term_id"] == "uow"
     assert body["answers"][0]["verdict"] == "correct"
+
+
+@pytest.fixture
+def client_with_term_stats() -> Generator[
+    tuple[TestClient, InMemoryTermStatsRepository]
+]:
+    """Overrides get_term_stats_repository with a fresh in-memory repository
+    a test can seed directly, and get_unit_of_work with a bank pre-seeded
+    with "uow" — GET .../stats checks term existence via UnitOfWork first."""
+    term = Term(
+        id="uow",
+        term="UoW",
+        expansion="Unit of Work",
+        definitions=(
+            "Pattern that groups related changes into one transactional unit.",
+        ),
+        categories=(Category(slug="architecture"),),
+    )
+    uow = InMemoryUnitOfWork(terms={"uow": term})
+    repo = InMemoryTermStatsRepository()
+
+    async def override_get_unit_of_work():
+        yield uow
+
+    async def override_get_term_stats_repository():
+        yield repo
+
+    app.dependency_overrides[get_unit_of_work] = override_get_unit_of_work
+    app.dependency_overrides[get_term_stats_repository] = (
+        override_get_term_stats_repository
+    )
+    with TestClient(app) as client:
+        yield client, repo
+    app.dependency_overrides.pop(get_unit_of_work, None)
+    app.dependency_overrides.pop(get_term_stats_repository, None)
+
+
+def test_get_term_stats_for_a_term_with_no_data(
+    client_with_term_stats: tuple[TestClient, InMemoryTermStatsRepository],
+) -> None:
+    """A term with no graded answers yet returns zeros, not a 404."""
+    client, _ = client_with_term_stats
+
+    response = client.get("/terms/uow/stats")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "term_id": "uow",
+        "correct_count": 0,
+        "partial_count": 0,
+        "incorrect_count": 0,
+        "observed_difficulty": None,
+    }
+
+
+def test_get_term_stats_reflects_recorded_verdicts(
+    client_with_term_stats: tuple[TestClient, InMemoryTermStatsRepository],
+) -> None:
+    """Stats recorded against the shared repository (as the consumer would)
+    are visible through the read endpoint."""
+    client, repo = client_with_term_stats
+    asyncio.run(repo.record("uow", Verdict.CORRECT))
+    asyncio.run(repo.record("uow", Verdict.PARTIAL))
+    asyncio.run(repo.record("uow", Verdict.INCORRECT))
+
+    response = client.get("/terms/uow/stats")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["correct_count"] == 1
+    assert body["partial_count"] == 1
+    assert body["incorrect_count"] == 1
+    assert body["observed_difficulty"] == pytest.approx(2 / 3)
+
+
+def test_get_term_stats_for_a_nonexistent_term(
+    client_with_term_stats: tuple[TestClient, InMemoryTermStatsRepository],
+) -> None:
+    """A term that doesn't exist in the bank at all is a 404, distinct from
+    a real term with no graded answers yet (which is a 200 of zeros)."""
+    client, _ = client_with_term_stats
+
+    response = client.get("/terms/nonexistent/stats")
+
+    assert response.status_code == 404

@@ -13,17 +13,24 @@ from anthropic import AsyncAnthropic
 
 from game_service.api.config import settings
 from game_service.application.ports import EventPublisher
+from game_service.application.ports import TermStatsRepository
 from game_service.application.ports import UnitOfWork
 from game_service.domain.graders import AnswerEvaluator
 from game_service.domain.graders import build_deterministic_evaluator
 from game_service.domain.llm_grader import LLMRubricGrader
+from game_service.infrastructure.answer_graded_stats import TOPIC as ANSWER_TOPIC
+from game_service.infrastructure.answer_graded_stats import (
+    start_consumer_task as start_stats_consumer_task,
+)
 from game_service.infrastructure.database import create_db_engine
 from game_service.infrastructure.grpc_term_repository import GrpcTermRepository
 from game_service.infrastructure.kafka_event_publisher import KafkaEventPublisher
 from game_service.infrastructure.llm_judge import AnthropicJudgePort
 from game_service.infrastructure.memory import InMemoryGradeCache
+from game_service.infrastructure.memory import InMemoryTermStatsRepository
 from game_service.infrastructure.memory import InMemoryUnitOfWork
 from game_service.infrastructure.profanity_checker import BetterProfanityChecker
+from game_service.infrastructure.sql_repositories import SQLTermStatsRepository
 from game_service.infrastructure.sql_uow import SQLUnitOfWork
 from game_service.infrastructure.term_cache_invalidator import TOPIC as TERM_TOPIC
 from game_service.infrastructure.term_cache_invalidator import ConsumerHealth
@@ -40,6 +47,9 @@ _event_publisher: EventPublisher | None = None
 _kafka_consumer: AIOKafkaConsumer | None = None
 _consumer_task: asyncio.Task[None] | None = None
 _consumer_health: ConsumerHealth | None = None
+_stats_consumer: AIOKafkaConsumer | None = None
+_stats_consumer_task: asyncio.Task[None] | None = None
+_stats_consumer_health: ConsumerHealth | None = None
 
 # None when ANTHROPIC_API_KEY is unset: get_llm_grader then returns None and
 # SubmitAnswer runs deterministic-only, same as Phase 1.
@@ -64,6 +74,11 @@ _answer_evaluator = build_deterministic_evaluator(
 # paths — the bug this corrects affected both.
 _grade_cache = InMemoryGradeCache()
 
+# Fallback for the no-DATABASE_URL path (tests): the same instance the
+# in-memory answer_graded_stats consumer would write to. Never used when
+# _session_factory is set — get_term_stats_repository opens a real session.
+_in_memory_term_stats = InMemoryTermStatsRepository()
+
 
 async def _init_session_factory() -> None:
     """Initialize the session factory, engine, gRPC channel, Kafka producer, and
@@ -79,6 +94,7 @@ async def _init_session_factory() -> None:
     global _session_factory, _engine, _grpc_channel, _term_repository
     global _kafka_producer, _event_publisher, _kafka_consumer, _consumer_task
     global _consumer_health
+    global _stats_consumer, _stats_consumer_task, _stats_consumer_health
     if settings.DATABASE_URL is None:
         return
     _engine, _session_factory = await create_db_engine(str(settings.DATABASE_URL))
@@ -100,6 +116,17 @@ async def _init_session_factory() -> None:
             _kafka_consumer, _term_repository, _consumer_health
         )
 
+        _stats_consumer = AIOKafkaConsumer(
+            ANSWER_TOPIC,
+            bootstrap_servers=settings.KAFKA_BROKER_URL,
+            group_id="game-service-answer-graded-stats",
+        )
+        await _stats_consumer.start()
+        _stats_consumer_health = ConsumerHealth()
+        _stats_consumer_task = start_stats_consumer_task(
+            _stats_consumer, _session_factory, _stats_consumer_health
+        )
+
 
 async def get_unit_of_work() -> AsyncGenerator[UnitOfWork]:
     """Provide a Unit of Work for the request (in-memory for tests, SQL for production).
@@ -119,6 +146,21 @@ async def get_unit_of_work() -> AsyncGenerator[UnitOfWork]:
             )
 
 
+async def get_term_stats_repository() -> AsyncGenerator[TermStatsRepository]:
+    """Provide a TermStatsRepository for the request (in-memory for tests,
+    SQL for production) — read side of ADR-0011's AnswerGraded consumer.
+
+    Not part of UnitOfWork: written by the Kafka consumer outside any
+    request's transaction, read here as a plain query with no writes to
+    commit.
+    """
+    if _session_factory is None:
+        yield _in_memory_term_stats
+    else:
+        async with _session_factory() as session:
+            yield SQLTermStatsRepository(session)
+
+
 def get_llm_grader() -> LLMRubricGrader | None:
     """Provide the LLM rubric grader, or None if ANTHROPIC_API_KEY is unset."""
     return _llm_grader
@@ -130,5 +172,12 @@ def get_answer_evaluator() -> AnswerEvaluator:
 
 
 def get_consumer_health() -> ConsumerHealth | None:
-    """Provide the Kafka consumer's health tracker, or None if Kafka is unconfigured."""
+    """Provide the term-cache invalidator's health tracker, or None if Kafka
+    is unconfigured."""
     return _consumer_health
+
+
+def get_stats_consumer_health() -> ConsumerHealth | None:
+    """Provide the answer-graded stats consumer's health tracker, or None if
+    Kafka is unconfigured."""
+    return _stats_consumer_health

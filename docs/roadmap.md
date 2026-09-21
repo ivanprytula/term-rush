@@ -127,9 +127,7 @@ cache/fallback design, the gRPC-health-into-`/ready` gap that wasn't built)
 ## Phase 3b — Kafka event log
 
 **Tag:** Skills-practice, though it earns a small product win (cache
-staleness bounded by an event instead of only a TTL). `AnswerGraded` has no
-consumer yet — it's the clearest evidence in the repo that this is
-capability being demonstrated, not a problem the product currently has. See
+staleness bounded by an event instead of only a TTL). See
 [skills-map.md § Distributed systems](./skills-map.md#distributed-systems-queues-caching-consistency).
 
 **Problem:** `game-service`'s gRPC term cache relied on a flat 300s TTL
@@ -145,10 +143,16 @@ separate container — the cache it invalidates is that process's own dict).
 
 **Shipped:** `content-service` publishes `TermPublished`, consumed by
 `game-service` to evict the matching gRPC cache entry immediately.
-`game-service` publishes `AnswerGraded` (no consumer yet — provisioned
-capacity, disclosed as such). Consumer self-heals via a supervised restart
-loop with backoff; `/ready` degrades (not fails) when the consumer goes
-stale.
+`game-service` publishes `AnswerGraded`. Consumer self-heals via a
+supervised restart loop with backoff; `/ready` degrades (not fails) when
+either consumer goes stale.
+
+**Update (2026-09-21):** `AnswerGraded` gained its first consumer — a
+per-term verdict tally (`term_stats` table), surfaced via `GET
+/terms/{id}/stats` as an observed-difficulty ratio. This is the small,
+warehouse-free version of [ADR-0005](./adr/0005-data-engineering-scope.md)'s
+`mart_term_difficulty` idea (see "Not yet started" below) — the game's own
+play data recalibrating the game, without Dagster/dbt.
 
 **ADRs:** [0011](./adr/0011-kafka-event-log.md) (event catalog, at-most-once
 delivery accepted and why, consumer supervision, `/ready` degradation)

@@ -31,10 +31,13 @@ protocol, not a Redpanda-specific API).
 A Kafka-API event log carries two event types today:
 
 - `AnswerGraded` (topic `answers.graded`) — published by `game-service` on
-  every graded answer. No consumer yet; exists for future analytics/
-  leaderboard projections. Replayability is the reason this is a log and
-  not a simple queue: a new consumer can be added later and read the full
-  history, not just events from its start time.
+  every graded answer. Consumed in-process by `game-service` itself to
+  tally per-term verdict counts (`term_stats` table), surfaced via `GET
+  /terms/{id}/stats` as an "observed difficulty" ratio — the game's own
+  play data recalibrating the game, without the ADR-0005 warehouse.
+  Replayability is still the reason this is a log and not a simple queue:
+  a second consumer (e.g. a future warehouse mart) can be added later and
+  read the full history, not just events from its start time.
 - `TermPublished` (topic `terms.published`) — published by `content-service`
   on every term write. Consumed by `game-service` to evict the matching
   entry from `GrpcTermRepository`'s cache immediately, rather than waiting
@@ -61,7 +64,12 @@ crash between the domain write committing and `publish()` being called —
 or a broker error caught and swallowed as above — loses that one event
 permanently. Accepted here because:
 
-- `AnswerGraded` has no consumer yet; a lost event costs nothing today.
+- `AnswerGraded`'s consumer (term-difficulty tally) degrades gracefully on
+  loss: a missed event just under-counts one attempt for one term. Nothing
+  reads `term_stats` as ground truth for a correctness-sensitive decision —
+  it is an observed-ratio signal, not a ledger that must balance. Wrong by
+  one is invisible; wrong by many would show up as an implausible ratio,
+  which is a monitoring problem, not a silent-corruption one.
 - `TermPublished`'s only consumer (cache invalidation) has the 300s TTL as
   a correctness backstop — a lost event means the cache serves a stale
   term for at most 5 more minutes, not forever.
@@ -155,9 +163,12 @@ breaking anything else.
   contract beyond what each consumer chooses to read defensively (the
   invalidator's `try/except (json.JSONDecodeError, KeyError)` around
   `payload["term_id"]` is that defense today).
-- `AnswerGraded` has no consumer — it's provisioned capability, not yet
-  load-bearing. Worth being explicit that this is true, since an unused
-  topic is easy to mistake for a finished feature.
+- `AnswerGraded`'s consumer opens its own short-lived SQL session per
+  message rather than sharing a request's transaction — correct (this
+  consumer runs outside any request) but means a burst of graded answers
+  is one Postgres round-trip each, not batched. Fine at today's volume;
+  worth revisiting if throughput ever matters (see "When I would change
+  this").
 
 ## When I Would Change This
 
@@ -183,3 +194,9 @@ breaking anything else.
 - **`confluentinc/cp-kafka` (KRaft)**: swap for Redpanda if a reviewer
   specifically needs to see vanilla Kafka rather than a compatible
   implementation. One `compose.yml` image change; `aiokafka` doesn't care.
+- **Batched stats writes**: if `AnswerGraded` volume ever makes one
+  Postgres round-trip per message a real bottleneck, buffer a window of
+  messages and upsert them in one statement instead. Not built yet because
+  today's volume doesn't justify the added complexity (buffering means
+  reasoning about a crash losing the buffer, which the current one-message
+  design avoids entirely).
