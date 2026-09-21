@@ -100,14 +100,15 @@ clean:
 
 # === Running Services & Containers ===
 
-# Start postgres, postgres-content, and redis for local development.
+# Start postgres, postgres-content, redis, and redpanda for local development.
 up:
-    docker compose up -d postgres postgres-content redis
+    docker compose up -d --wait postgres postgres-content redis redpanda
     @echo "postgres: localhost:5432"
     @echo "postgres-content: localhost:5433"
     @echo "redis: localhost:6379"
+    @echo "redpanda: localhost:9092"
 
-# Stop postgres, postgres-content, and redis.
+# Stop postgres, postgres-content, redis, and redpanda.
 down:
     docker compose down
 
@@ -164,7 +165,17 @@ dev-all:
     sleep 2
     just dev
 
-# Run the Vite dev server (proxies /sessions and /terms to dev on :8000).
+# Full local stack from cold: infra containers (up), both services'
+# migrations, content-service seed data, then both APIs with hot-reload.
+# Ctrl-C stops the APIs; the containers from `up` keep running — `just down`
+# to stop those too.
+run-all: up
+    just migrate
+    just migrate-content
+    just seed-content
+    just dev-all
+
+# Run the Vite dev server (proxies /game-rounds and /terms to dev on :8000).
 web port="5173":
     cd services/web && npm run dev -- --port {{port}}
 
