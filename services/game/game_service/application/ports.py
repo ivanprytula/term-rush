@@ -10,7 +10,7 @@ from abc import ABC
 from abc import abstractmethod
 
 from game_service.domain.outcome import GradeOutcome
-from game_service.domain.session import Session
+from game_service.domain.round import GameRound
 from game_service.domain.term import Term
 
 
@@ -31,16 +31,16 @@ class TermRepository(ABC):
         """
 
 
-class SessionRepository(ABC):
-    """Persist and retrieve play-through sessions."""
+class RoundRepository(ABC):
+    """Persist and retrieve play-through rounds."""
 
     @abstractmethod
-    async def by_id(self, session_id: str) -> Session | None:
-        """Fetch a session by ID. None if not found."""
+    async def by_id(self, round_id: str) -> GameRound | None:
+        """Fetch a round by ID. None if not found."""
 
     @abstractmethod
-    async def save(self, session: Session) -> None:
-        """Create or replace a session."""
+    async def save(self, round_: GameRound) -> None:
+        """Create or replace a round."""
 
 
 class GradeCache(ABC):
@@ -75,7 +75,7 @@ class UnitOfWork(ABC):
     """
 
     terms: TermRepository
-    sessions: SessionRepository
+    rounds: RoundRepository
     grade_cache: GradeCache
     events: EventPublisher
 

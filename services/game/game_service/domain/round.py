@@ -1,7 +1,7 @@
 """A play-through: the record of what a player attempted and how they scored.
 
 Kept separate from Term (knowledge) and GradeOutcome (one grading result):
-a Session is the append-only log that ties many outcomes to one player's run.
+a GameRound is the append-only log that ties many outcomes to one player's run.
 """
 
 from __future__ import annotations
@@ -16,12 +16,12 @@ from game_service.domain.outcome import MatchedVia
 from game_service.domain.outcome import Verdict
 
 
-class SessionFull(Exception):
-    """Raised when a session already holds SESSION_MAX_ANSWERS answers."""
+class RoundFull(Exception):
+    """Raised when a round already holds ROUND_MAX_ANSWERS answers."""
 
 
 class SubmittedAnswer(BaseModel):
-    """One graded answer, recorded against the session it was submitted in."""
+    """One graded answer, recorded against the round it was submitted in."""
 
     model_config = {"frozen": True}
 
@@ -34,23 +34,23 @@ class SubmittedAnswer(BaseModel):
     submitted_at: datetime
 
 
-class Session(BaseModel):
+class GameRound(BaseModel):
     """A player's play-through. Grows by appending SubmittedAnswer records."""
 
     model_config = {"frozen": True}
 
-    id: str = Field(max_length=constants.SESSION_ID_MAX_LEN)
+    id: str = Field(max_length=constants.ROUND_ID_MAX_LEN)
     created_at: datetime
     answers: tuple[SubmittedAnswer, ...] = ()
 
-    def record(self, answer: SubmittedAnswer) -> Session:
-        """Return a new Session with the answer appended.
+    def record(self, answer: SubmittedAnswer) -> GameRound:
+        """Return a new GameRound with the answer appended.
 
         Frozen like Term/GradeOutcome: callers replace, never mutate in place.
 
         Raises:
-            SessionFull: the session already holds SESSION_MAX_ANSWERS answers.
+            RoundFull: the round already holds ROUND_MAX_ANSWERS answers.
         """
-        if len(self.answers) >= constants.SESSION_MAX_ANSWERS:
-            raise SessionFull(self.id)
+        if len(self.answers) >= constants.ROUND_MAX_ANSWERS:
+            raise RoundFull(self.id)
         return self.model_copy(update={"answers": (*self.answers, answer)})

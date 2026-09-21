@@ -22,12 +22,12 @@ function parseSseFrame(frame: string): { event: string; data: string } | null {
 }
 
 export async function submitAnswerStream(
-  sessionId: string,
+  roundId: string,
   request: SubmitAnswerRequest,
   { onRationaleDelta, onGraded, onError }: StreamCallbacks,
 ): Promise<void> {
   const response = await fetch(
-    `/sessions/${encodeURIComponent(sessionId)}/answers/submit/stream`,
+    `/game-rounds/${encodeURIComponent(roundId)}/answers/submit/stream`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

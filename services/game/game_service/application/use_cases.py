@@ -19,8 +19,8 @@ from game_service.domain.outcome import GradeOutcome
 from game_service.domain.outcome import StreamEvent
 from game_service.domain.outcome import StreamEventKind
 from game_service.domain.outcome import Verdict
-from game_service.domain.session import Session
-from game_service.domain.session import SubmittedAnswer
+from game_service.domain.round import GameRound
+from game_service.domain.round import SubmittedAnswer
 from game_service.domain.term import Term
 
 logger = logging.getLogger(__name__)
@@ -51,12 +51,12 @@ class SubmitAnswer:
 
     async def execute(
         self,
-        session_id: str,
+        round_id: str,
         term_id: str,
         answer: str,
         use_llm_grading: bool = False,
     ) -> GradeOutcome:
-        """Grade the answer and record it against the session. Return cached
+        """Grade the answer and record it against the round. Return cached
         outcome if available.
 
         use_llm_grading: player opt-in. Only escalates when the deterministic
@@ -70,7 +70,7 @@ class SubmitAnswer:
         async with self.uow:
             cached = await self.uow.grade_cache.get(term_id, answer_hash)
             if cached is not None:
-                return await self.record(session_id, term_id, cached)
+                return await self.record(round_id, term_id, cached)
 
             term = await self.uow.terms.by_id(term_id)
             if term is None:
@@ -87,13 +87,13 @@ class SubmitAnswer:
             ):
                 outcome = await self._try_llm_grade(answer, term, outcome)
 
-            return await self.persist(session_id, term_id, answer, outcome)
+            return await self.persist(round_id, term_id, answer, outcome)
 
     async def persist(
-        self, session_id: str, term_id: str, answer: str, outcome: GradeOutcome
+        self, round_id: str, term_id: str, answer: str, outcome: GradeOutcome
     ) -> GradeOutcome:
         """Cache a freshly graded outcome, publish AnswerGraded, and record
-        it against the session. Public: SubmitAnswerStreaming (which grades
+        it against the round. Public: SubmitAnswerStreaming (which grades
         outside this use case) calls this directly instead of execute() to
         avoid re-grading and duplicating persistence logic.
 
@@ -112,20 +112,20 @@ class SubmitAnswer:
                 "matched_via": outcome.matched_via.value,
             },
         )
-        return await self.record(session_id, term_id, outcome)
+        return await self.record(round_id, term_id, outcome)
 
     async def record(
-        self, session_id: str, term_id: str, outcome: GradeOutcome
+        self, round_id: str, term_id: str, outcome: GradeOutcome
     ) -> GradeOutcome:
-        """Append outcome to the session (cached or freshly graded). Public
+        """Append outcome to the round (cached or freshly graded). Public
         for the same reason as persist() — SubmitAnswerStreaming's cache-hit
         path calls this directly.
         """
-        session = await self.uow.sessions.by_id(session_id)
-        if session is None:
-            session = Session(id=session_id, created_at=datetime.now(UTC))
+        round_ = await self.uow.rounds.by_id(round_id)
+        if round_ is None:
+            round_ = GameRound(id=round_id, created_at=datetime.now(UTC))
 
-        session = session.record(
+        round_ = round_.record(
             SubmittedAnswer(
                 term_id=term_id,
                 verdict=outcome.verdict,
@@ -134,7 +134,7 @@ class SubmitAnswer:
                 submitted_at=datetime.now(UTC),
             )
         )
-        await self.uow.sessions.save(session)
+        await self.uow.rounds.save(round_)
         return outcome
 
     async def _try_llm_grade(
@@ -170,7 +170,7 @@ class SubmitAnswerStreaming:
     """Grade an answer, streaming live LLM feedback text as it generates.
 
     Delegates persistence to SubmitAnswer.persist()/record() rather than
-    duplicating cache/session/event logic — this class only adds the
+    duplicating cache/round/event logic — this class only adds the
     streaming rationale on top of the same grading rules SubmitAnswer uses.
     """
 
@@ -189,7 +189,7 @@ class SubmitAnswerStreaming:
 
     async def execute(
         self,
-        session_id: str,
+        round_id: str,
         term_id: str,
         answer: str,
         use_llm_grading: bool = False,
@@ -204,7 +204,7 @@ class SubmitAnswerStreaming:
         async with self.uow:
             cached = await self.uow.grade_cache.get(term_id, answer_hash)
             if cached is not None:
-                outcome = await self._submit_answer.record(session_id, term_id, cached)
+                outcome = await self._submit_answer.record(round_id, term_id, cached)
                 yield StreamEvent.graded(outcome)
                 return
 
@@ -227,7 +227,7 @@ class SubmitAnswerStreaming:
                         outcome = event.outcome
 
             final = await self._submit_answer.persist(
-                session_id, term_id, answer, outcome
+                round_id, term_id, answer, outcome
             )
             yield StreamEvent.graded(final)
 
@@ -254,40 +254,40 @@ class SubmitAnswerStreaming:
             )
 
 
-class GetSession:
-    """Fetch a session's recorded answers."""
+class GetRound:
+    """Fetch a round's recorded answers."""
 
     def __init__(self, uow: UnitOfWork) -> None:
         self.uow = uow
 
-    async def execute(self, session_id: str) -> Session:
-        """Return the session. Raises ValueError if it does not exist."""
+    async def execute(self, round_id: str) -> GameRound:
+        """Return the round. Raises ValueError if it does not exist."""
         async with self.uow:
-            session = await self.uow.sessions.by_id(session_id)
-            if session is None:
-                raise ValueError(f"Session {session_id} not found")
-            return session
+            round_ = await self.uow.rounds.by_id(round_id)
+            if round_ is None:
+                raise ValueError(f"Round {round_id} not found")
+            return round_
 
 
 class GetRandomTerm:
     """Fetch a random term to present to the player, avoiding ones already
-    seen this session where the bank allows it."""
+    seen this round where the bank allows it."""
 
     def __init__(self, uow: UnitOfWork) -> None:
         self.uow = uow
 
-    async def execute(self, session_id: str | None = None) -> Term:
+    async def execute(self, round_id: str | None = None) -> Term:
         """Return a random term. Raises ValueError if the term bank is empty.
 
-        session_id is optional: unauthenticated callers (or callers before
-        a session exists) still get a plain random term, unexcluded.
+        round_id is optional: unauthenticated callers (or callers before
+        a round exists) still get a plain random term, unexcluded.
         """
         async with self.uow:
             excluded_ids: frozenset[str] = frozenset()
-            if session_id is not None:
-                session = await self.uow.sessions.by_id(session_id)
-                if session is not None:
-                    excluded_ids = frozenset(a.term_id for a in session.answers)
+            if round_id is not None:
+                round_ = await self.uow.rounds.by_id(round_id)
+                if round_ is not None:
+                    excluded_ids = frozenset(a.term_id for a in round_.answers)
             term = await self.uow.terms.random(excluded_ids)
             if term is None:
                 raise ValueError("No terms available")

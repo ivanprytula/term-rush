@@ -18,18 +18,16 @@ from game_service.domain import constants
 from game_service.domain.outcome import GradeOutcome
 from game_service.domain.outcome import StreamEvent
 from game_service.domain.outcome import StreamEventKind
-from game_service.domain.session import Session
+from game_service.domain.round import GameRound
 from game_service.domain.term import Term
 
-SessionIdPath = Annotated[
-    str, Path(min_length=1, max_length=constants.SESSION_ID_MAX_LEN)
-]
+RoundIdPath = Annotated[str, Path(min_length=1, max_length=constants.ROUND_ID_MAX_LEN)]
 
-# Optional: GET /terms/random works without a session (plain random term),
+# Optional: GET /terms/random works without a round (plain random term),
 # but supplying one lets the use case exclude terms already seen this round.
-SessionIdQuery = Annotated[
+RoundIdQuery = Annotated[
     str | None,
-    Query(min_length=1, max_length=constants.SESSION_ID_MAX_LEN),
+    Query(min_length=1, max_length=constants.ROUND_ID_MAX_LEN),
 ]
 
 
@@ -151,7 +149,7 @@ class SubmitAnswerStreamEvent(BaseModel):
 
 
 class SubmittedAnswerResponse(BaseModel):
-    """One recorded answer in a session's history."""
+    """One recorded answer in a round's history."""
 
     term_id: str
     verdict: str = Field(examples=["correct", "partial", "incorrect"])
@@ -160,19 +158,19 @@ class SubmittedAnswerResponse(BaseModel):
     submitted_at: datetime
 
 
-class SessionResponse(BaseModel):
-    """A session's recorded answer history."""
+class RoundResponse(BaseModel):
+    """A round's recorded answer history."""
 
     id: str
     created_at: datetime
     answers: list[SubmittedAnswerResponse]
 
     @staticmethod
-    def from_session(session: Session) -> SessionResponse:
-        """Convert a Session to a response."""
-        return SessionResponse(
-            id=session.id,
-            created_at=session.created_at,
+    def from_round(round_: GameRound) -> RoundResponse:
+        """Convert a GameRound to a response."""
+        return RoundResponse(
+            id=round_.id,
+            created_at=round_.created_at,
             answers=[
                 SubmittedAnswerResponse(
                     term_id=a.term_id,
@@ -181,7 +179,7 @@ class SessionResponse(BaseModel):
                     matched_via=a.matched_via.value,
                     submitted_at=a.submitted_at,
                 )
-                for a in session.answers
+                for a in round_.answers
             ],
         )
 

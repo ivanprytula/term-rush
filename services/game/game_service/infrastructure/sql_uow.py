@@ -10,13 +10,13 @@ from game_service.application.ports import TermRepository
 from game_service.application.ports import UnitOfWork
 from game_service.infrastructure.memory import InMemoryEventPublisher
 from game_service.infrastructure.memory import InMemoryGradeCache
-from game_service.infrastructure.sql_repositories import SQLSessionRepository
+from game_service.infrastructure.sql_repositories import SQLRoundRepository
 
 
 class SQLUnitOfWork(UnitOfWork):
     """Transaction coordinator backed by SQLAlchemy.
 
-    Sessions live in PostgreSQL; terms come from content-service over gRPC
+    Rounds live in PostgreSQL; terms come from content-service over gRPC
     (ADR-0009) — terms is a shared, long-lived repository instance passed in
     rather than constructed per-request, so its lookup cache persists across
     requests. grade_cache is the same shared-instance pattern — a cache
@@ -35,7 +35,7 @@ class SQLUnitOfWork(UnitOfWork):
     ) -> None:
         self.session = session
         self.terms = terms
-        self.sessions = SQLSessionRepository(session)
+        self.rounds = SQLRoundRepository(session)
         self.grade_cache = (
             grade_cache if grade_cache is not None else InMemoryGradeCache()
         )

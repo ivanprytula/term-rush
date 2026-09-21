@@ -12,7 +12,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/sessions": "http://localhost:8000",
+      "/game-rounds": "http://localhost:8000",
       "/terms": "http://localhost:8000",
     },
   },
