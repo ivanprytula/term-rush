@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Mic, MicOff } from "lucide-react";
 import {
   createRoundGameRoundsPost,
   getRandomTermTermsRandomGet,
@@ -12,6 +13,7 @@ import type {
 } from "./client";
 import { submitAnswerStream } from "./submitAnswerStream";
 import { useSprintCountdown } from "./useSprintCountdown";
+import { useSpeechRecognition } from "./useSpeechRecognition";
 
 const THEME_KEY = "term-rush-theme";
 const ROUND_LENGTH = 10;
@@ -398,7 +400,20 @@ export default function App() {
   // rAF countdown below whenever a fresh round starts.
   const [serverRemaining, setServerRemaining] = useState<number | null>(null);
   const remainingSeconds = useSprintCountdown(serverRemaining);
+  const speech = useSpeechRecognition();
+  const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const sprintExpired = roundMode === "sprint" && remainingSeconds === 0;
+
+  useEffect(() => {
+    if (speech.transcript) setAnswer(speech.transcript);
+  }, [speech.transcript]);
+
+  useEffect(() => {
+    const input = answerInputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+  }, [answer]);
 
   // Exhaustive over RoundMode: a 6th mode added later is a type error here,
   // not a silently-wrong fallback branch.
@@ -410,6 +425,36 @@ export default function App() {
     daily_20: termsRemaining === 0,
   };
   const roundComplete = ROUND_END[roundMode];
+
+  useEffect(() => {
+    if (!term || result || roundComplete) speech.stop();
+  }, [roundComplete, result, speech.stop, term]);
+
+  useEffect(() => {
+    const handleVoiceShortcut = (event: KeyboardEvent) => {
+      const isVoiceShortcut =
+        event.key.toLowerCase() === "m" &&
+        event.shiftKey &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey;
+      if (!isVoiceShortcut || !term || result || roundComplete || loading) {
+        return;
+      }
+      event.preventDefault();
+      speech.isListening ? speech.stop() : speech.start();
+    };
+
+    window.addEventListener("keydown", handleVoiceShortcut);
+    return () => window.removeEventListener("keydown", handleVoiceShortcut);
+  }, [
+    loading,
+    result,
+    roundComplete,
+    speech.isListening,
+    speech.start,
+    speech.stop,
+    term,
+  ]);
 
   const ROUND_END_HEADING: Record<RoundMode, string> = {
     classic: "round complete",
@@ -508,6 +553,7 @@ export default function App() {
     // round's own terminal state (Sprint's timer, Survival's lives, ...)
     // already flips to its end screen below.
     if (!term || !answer.trim() || !roundId || roundComplete) return;
+    speech.stop();
     setLoading(true);
     setError(null);
     // Boss mode forces LLM grading server-side regardless of what's sent
@@ -667,16 +713,65 @@ export default function App() {
                 {term.term}
               </p>
             </div>
-            <div className="flex items-center gap-2 bg-surface border border-surface-border px-4 py-3 focus-within:border-phosphor">
+            <div className="flex items-start gap-2 bg-surface border border-surface-border px-4 py-3 focus-within:border-phosphor">
               <span className="text-phosphor select-none">&gt;</span>
-              <input
+              <textarea
+                ref={answerInputRef}
                 autoFocus
+                rows={2}
+                maxLength={512}
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    submitAnswer();
+                  }
+                }}
                 placeholder="type your answer…"
-                className="w-full bg-transparent text-text placeholder:text-text-muted focus:outline-none"
+                className="max-h-40 min-h-12 w-full resize-none overflow-y-auto bg-transparent text-text placeholder:text-text-muted focus:outline-none"
               />
+              <button
+                type="button"
+                onClick={() =>
+                  speech.isListening ? speech.stop() : speech.start()
+                }
+                disabled={!speech.isSupported || loading}
+                aria-label={
+                  speech.isListening
+                    ? "Stop voice input"
+                    : "Start voice input"
+                }
+                aria-pressed={speech.isListening}
+                title={
+                  speech.isSupported
+                    ? speech.isListening
+                      ? "Stop voice input"
+                      : "Start voice input"
+                    : "Voice input is unavailable in this browser"
+                }
+                className="shrink-0 text-text-muted hover:text-phosphor disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {speech.isListening ? <MicOff size={18} /> : <Mic size={18} />}
+              </button>
+              <kbd className="hidden text-[10px] text-text-muted sm:inline">
+                Ctrl/Cmd+Shift+M
+              </kbd>
             </div>
+            <div className="flex items-center justify-between text-xs text-text-muted">
+              <span>Enter = new line</span>
+              <span>
+                <kbd>Ctrl/Cmd+Enter</kbd> = submit · {answer.length}/512
+              </span>
+            </div>
+            <p className="min-h-5 text-xs text-text-muted" aria-live="polite">
+              {speech.error ??
+                (speech.isListening
+                  ? "listening... speak your answer"
+                  : !speech.isSupported
+                    ? "voice input unavailable in this browser"
+                    : "")}
+            </p>
             {/* Boss mode forces LLM grading server-side — an unchecked,
                 ignorable checkbox here would misrepresent what actually
                 happens, so it's replaced with a plain statement of fact. */}
