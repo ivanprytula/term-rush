@@ -159,6 +159,60 @@ delivery accepted and why, consumer supervision, `/ready` degradation)
 
 ---
 
+## Phase 3c — Game modes: Sprint, Survival, Boss Round, Daily 20
+
+**Tag:** Both. Product: a single untimed loop is one game, not four — each
+mode is a genuinely different pressure (clock, lives, stakes, shared
+puzzle) the original prototype never had. Skills-practice: Boss Round and
+Daily 20 both cross the content-service boundary (filtered selection,
+deterministic seeding), reusing the gRPC/event-log foundation from Phase
+3a/3b rather than adding a third integration pattern.
+
+**Problem:** README promised "Game modes: Sprint, Survival, Boss Round,
+Daily 20" since Phase 1. Sprint shipped first (see below) but never got a
+roadmap entry — a gap this phase closes retroactively. None of the other
+three had any mechanics defined anywhere before this phase's plan.
+
+**Decision:** build Survival → Boss Round → Daily 20, each proving one
+piece of shared plumbing the next reuses: Survival exercises a second
+terminal condition (lives, not a clock) with no cross-service change;
+Boss Round adds filtered term selection (`TermFilter`, proto/content-service
+change); Daily 20 adds deterministic shared seeding, the most expensive of
+the three. A `mode`-scoped leaderboard shipped alongside, fixing a
+pre-existing fairness bug (Classic and Sprint scores were mixed on one
+board with no way to separate them).
+
+**Shipped (Sprint, retroactive entry):** `RoundMode.SPRINT`, a
+fixed-duration countdown (`started_at` + `duration_seconds`, both derived
+never stored-as-countdown), server-authoritative expiry rejection (422),
+LLM grading forced off, `requestAnimationFrame` client countdown.
+
+**Shipped (Survival):** `RoundMode.SURVIVAL`, `lives_remaining` (derived,
+`int | None`), one shared `RoundOver` exception (see ADR-0016) covering
+every mode's non-Sprint terminal condition, lives indicator in the client.
+
+**Shipped (Boss Round):** `TermFilter` domain value object and its proto
+wire form (`min_difficulty`/`require_examples`/`min_definition_length`),
+`GetNextTerm` deriving the filter from the round's own mode, LLM grading
+forced on with graceful fallback when no grader is configured.
+
+**Shipped (Daily 20):** `daily.py` (sha256-seeded, stdlib-only, pure),
+`GameRound.term_ids` snapshot at creation, positional (not random)
+`GetNextTerm` lookup, `ListTermIds` RPC, server-enforced 20-term cap — the
+first server-enforced count anywhere in the app.
+
+**Shipped (leaderboard):** `mode` column on `game_rounds` (denormalized
+the same way `total_score` already is), `GET /leaderboard?mode=` optional
+filter, composite `(mode, total_score DESC)` index.
+
+**Rules:** [game-rules.md § Game modes](./game-rules.md#game-modes)
+
+**ADRs:** [0016](./adr/0016-game-mode-terminal-states.md) (derived
+terminal state, one `RoundOver` exception, content predicates over a
+`boss_eligible` bool, seeding in the domain layer not content-service)
+
+---
+
 ## Not yet started
 
 - **GraphQL BFF** — collapse the session screen's 3 REST round-trips into

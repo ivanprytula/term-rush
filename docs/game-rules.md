@@ -4,6 +4,27 @@ You're shown a term — an abbreviation or short piece of jargon (`CAP`,
 `UoW`, `RAG`). Type what it means and submit. You get graded and shown
 feedback immediately, then move to the next term.
 
+## Game modes
+
+- **Classic** — untimed, one term at a time, no cap besides a generous
+  safety ceiling. The default.
+- **Sprint** — a 60-second countdown starts on round creation. The round
+  ends when the timer expires, regardless of how many terms you've
+  answered. AI feedback is unavailable — the streaming latency works
+  against a timed mode's point.
+- **Survival** — 3 lives. Each **Incorrect** verdict costs one life;
+  **Partial**/**Correct** are free. The round ends the moment lives hit
+  zero. Untimed, scored the same as Classic.
+- **Boss Round** — exactly one term, drawn from the hardest, most
+  well-defined entries in the bank. One answer, then the round ends
+  regardless of verdict. AI feedback is always on for this one answer —
+  there's no toggle, because the whole point is a real, high-stakes
+  grading pass.
+- **Daily 20** — a shared set of 20 terms, the same for everyone playing
+  that UTC calendar day (like a daily word puzzle). You can replay as many
+  times as you like; there's no "already played" lock since there's no
+  login. AI feedback is off, so everyone's score means the same thing.
+
 ## Scoring
 
 Each answer is scored 0–100 across four components:
@@ -76,6 +97,6 @@ repeats resume (there's nothing else left to show).
 
 ## What's not here yet
 
-No timer, no lives, no streak bonus, no game modes (Sprint/Survival/Boss
-Round) — those are on the [roadmap](../README.md#next-steps). Today it's
-one term at a time, graded, repeat.
+No streak bonus, no login (so no per-player Daily 20 lock or persisted
+best-times), no spaced repetition — those are on the
+[roadmap](../README.md#next-steps).
