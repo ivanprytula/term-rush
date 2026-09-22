@@ -118,3 +118,11 @@ class GrpcTermRepository(TermRepository):
             logger.warning("content-service ListCategories failed: %s", exc)
             return ()
         return tuple(reply.categories)
+
+    async def all_ids(self) -> tuple[str, ...]:
+        try:
+            reply = await self._stub.ListTermIds(term_pb2.ListTermIdsRequest())
+        except grpc.aio.AioRpcError as exc:
+            logger.warning("content-service ListTermIds failed: %s", exc)
+            return ()
+        return tuple(reply.term_ids)

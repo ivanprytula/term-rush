@@ -18,6 +18,7 @@ from term_proto import term_pb2_grpc
 from content_service.application.ports import UnitOfWork
 from content_service.application.use_cases import GetRandomTerm
 from content_service.application.use_cases import GetTermById
+from content_service.application.use_cases import ListAllTermIds
 from content_service.application.use_cases import ListCategories
 from content_service.domain.term import Term
 
@@ -102,6 +103,16 @@ class TermServiceServicer(term_pb2_grpc.TermServiceServicer):
             use_case = ListCategories(uow)
             categories = await use_case.execute()
             return term_pb2.ListCategoriesReply(categories=categories)
+
+    async def ListTermIds(
+        self,
+        request: term_pb2.ListTermIdsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> term_pb2.ListTermIdsReply:
+        async with asynccontextmanager(self._get_unit_of_work)() as uow:
+            use_case = ListAllTermIds(uow)
+            term_ids = await use_case.execute()
+            return term_pb2.ListTermIdsReply(term_ids=term_ids)
 
 
 async def serve(

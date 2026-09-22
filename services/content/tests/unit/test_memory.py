@@ -154,3 +154,19 @@ async def test_random_returns_none_when_no_term_matches_the_filters(
     await repo.upsert(term)  # MODERATE difficulty (default), no examples
 
     assert await repo.random(require_examples=True) is None
+
+
+@pytest.mark.asyncio
+async def test_all_ids_returns_every_id_sorted(term: Term) -> None:
+    repo = InMemoryTermRepository()
+    await repo.upsert(term.model_copy(update={"id": "zebra"}))
+    await repo.upsert(term.model_copy(update={"id": "apple"}))
+
+    assert await repo.all_ids() == ("apple", "zebra")
+
+
+@pytest.mark.asyncio
+async def test_all_ids_empty_when_bank_is_empty() -> None:
+    repo = InMemoryTermRepository()
+
+    assert await repo.all_ids() == ()

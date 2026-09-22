@@ -17,12 +17,13 @@ const THEME_KEY = "term-rush-theme";
 const ROUND_LENGTH = 10;
 const SURVIVAL_LIVES = 3; // mirrors constants.SURVIVAL_LIVES server-side
 
-// Daily 20 isn't in this list yet — its term-selection logic (the shared
-// seeded 20-term set) lands in a later slice; until then GetNextTerm always
-// draws a plain random term for it, so exposing it here would let a player
-// "play" a mode that silently isn't what its name promises. Add it once
-// its own slice actually implements it.
-const MODES: readonly RoundMode[] = ["classic", "sprint", "survival", "boss"];
+const MODES: readonly RoundMode[] = [
+  "classic",
+  "sprint",
+  "survival",
+  "boss",
+  "daily_20",
+];
 
 const MODE_LABEL: Record<RoundMode, string> = {
   classic: "classic",
@@ -367,6 +368,16 @@ export default function App() {
             answers.filter((a) => a.verdict === "incorrect").length,
         )
       : null;
+  // Daily 20 only. The server snapshots the round's real term count at
+  // creation (usually 20, but a smaller bank degrades to "however many
+  // terms exist" — see daily_term_ids) — read from that response rather
+  // than hard-coding 20 client-side, then counted down locally same as
+  // livesRemaining.
+  const [dailyTermCount, setDailyTermCount] = useState<number | null>(null);
+  const termsRemaining =
+    roundMode === "daily_20" && dailyTermCount !== null
+      ? Math.max(0, dailyTermCount - answers.length)
+      : null;
   // Every collection the player can choose to play from — fetched once on
   // mount, not tied to any round.
   const [categories, setCategories] = useState<string[]>([]);
@@ -383,11 +394,6 @@ export default function App() {
   const [serverRemaining, setServerRemaining] = useState<number | null>(null);
   const remainingSeconds = useSprintCountdown(serverRemaining);
   const sprintExpired = roundMode === "sprint" && remainingSeconds === 0;
-  // Daily 20's term cap isn't enforced client-side yet (its own slice reads
-  // this from the server's terms_remaining field instead of a hardcoded
-  // constant) — always false until then, so ROUND_END's daily_20 entry is
-  // unreachable today but type-checks against the full RoundMode union.
-  const dailyRoundComplete = false;
 
   // Exhaustive over RoundMode: a 6th mode added later is a type error here,
   // not a silently-wrong fallback branch.
@@ -396,7 +402,7 @@ export default function App() {
     sprint: sprintExpired,
     survival: livesRemaining === 0,
     boss: answers.length >= 1,
-    daily_20: dailyRoundComplete,
+    daily_20: termsRemaining === 0,
   };
   const roundComplete = ROUND_END[roundMode];
 
@@ -451,6 +457,7 @@ export default function App() {
     // RoundMode, not a plain string, so this is no longer a lossy narrowing.
     setRoundMode(data.mode as RoundMode);
     setServerRemaining(data.remaining_seconds ?? null);
+    setDailyTermCount(data.terms_remaining ?? null);
     // Explicit selectedCategory, not loadTerm's roundCategory default:
     // setRoundCategory above hasn't committed yet in this same tick.
     await loadTerm(data.id, selectedCategory);
@@ -606,6 +613,12 @@ export default function App() {
             <span className="sr-only" aria-live="polite">
               {livesRemaining ?? 0} lives remaining
             </span>
+          </p>
+        )}
+        {started && !roundComplete && roundMode === "daily_20" && (
+          <p className="text-sm text-text-dim text-center">
+            term {Math.min(answers.length + 1, dailyTermCount ?? 20)}/
+            {dailyTermCount ?? 20}
           </p>
         )}
 

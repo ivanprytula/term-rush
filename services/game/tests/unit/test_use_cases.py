@@ -316,6 +316,117 @@ async def test_get_next_term_ignores_boss_filter_for_classic_round() -> None:
     assert term.id == "trivial-term"
 
 
+def _bank(size: int) -> dict[str, Term]:
+    return {
+        f"term-{i:03d}": Term(
+            id=f"term-{i:03d}",
+            term=f"Term {i}",
+            expansion=f"expansion {i}",
+            definitions=(f"Definition of term {i}.",),
+            categories=(Category(slug="architecture"),),
+        )
+        for i in range(size)
+    }
+
+
+@pytest.mark.asyncio
+async def test_create_daily_round_snapshots_twenty_term_ids() -> None:
+    daily_uow = InMemoryUnitOfWork(terms=_bank(30))
+
+    round_ = await CreateGameRound(daily_uow).execute(mode=RoundMode.DAILY_20)
+
+    assert round_.term_ids is not None
+    assert len(round_.term_ids) == 20
+
+
+@pytest.mark.asyncio
+async def test_two_daily_rounds_same_day_get_the_same_terms() -> None:
+    """The headline requirement: every player starting a Daily 20 round
+    today draws the same 20 terms, in the same order."""
+    daily_uow = InMemoryUnitOfWork(terms=_bank(30))
+
+    first = await CreateGameRound(daily_uow).execute(mode=RoundMode.DAILY_20)
+    second = await CreateGameRound(daily_uow).execute(mode=RoundMode.DAILY_20)
+
+    assert first.id != second.id  # distinct rounds
+    assert first.term_ids == second.term_ids  # same puzzle
+
+
+@pytest.mark.asyncio
+async def test_create_daily_round_raises_when_bank_is_empty() -> None:
+    empty_uow = InMemoryUnitOfWork()
+
+    with pytest.raises(ValueError, match="No terms available"):
+        await CreateGameRound(empty_uow).execute(mode=RoundMode.DAILY_20)
+
+
+@pytest.mark.asyncio
+async def test_get_next_term_serves_daily_20_terms_in_seeded_order() -> None:
+    daily_uow = InMemoryUnitOfWork(terms=_bank(30))
+    round_ = await CreateGameRound(daily_uow).execute(mode=RoundMode.DAILY_20)
+    assert round_.term_ids is not None
+
+    first_term = await GetNextTerm(daily_uow).execute(round_id=round_.id)
+
+    assert first_term.id == round_.term_ids[0]
+
+
+@pytest.mark.asyncio
+async def test_get_next_term_serves_the_next_positional_term_after_an_answer() -> None:
+    """GetNextTerm indexes by how many answers already exist — the 2nd
+    fetch after 1 answer serves term_ids[1], not another draw of
+    term_ids[0]."""
+    daily_uow = InMemoryUnitOfWork(terms=_bank(30))
+    round_ = await CreateGameRound(daily_uow).execute(mode=RoundMode.DAILY_20)
+    assert round_.term_ids is not None
+    await SubmitAnswer(daily_uow).execute(round_.id, round_.term_ids[0], "an answer")
+
+    second_term = await GetNextTerm(daily_uow).execute(round_id=round_.id)
+
+    assert second_term.id == round_.term_ids[1]
+
+
+@pytest.mark.asyncio
+async def test_submit_answer_raises_round_over_after_daily_20_cap_reached() -> None:
+    daily_uow = InMemoryUnitOfWork(terms=_bank(25))
+    round_ = await CreateGameRound(daily_uow).execute(mode=RoundMode.DAILY_20)
+    assert round_.term_ids is not None
+    use_case = SubmitAnswer(daily_uow)
+
+    for term_id in round_.term_ids:
+        await use_case.execute(round_.id, term_id, f"answer for {term_id}")
+
+    with pytest.raises(RoundOver):
+        await use_case.execute(round_.id, round_.term_ids[0], "one more")
+
+
+@pytest.mark.asyncio
+async def test_daily_20_round_completes_correctly_with_a_bank_smaller_than_twenty() -> (
+    None
+):
+    """A bank with fewer than 20 terms degrades daily_term_ids to however
+    many exist — the round must end at that real count, not silently wait
+    for a 20th answer GetNextTerm could never serve. Regression coverage
+    for a bug caught live: terms_remaining/is_over were originally computed
+    from the DAILY_20_ROUND_SIZE constant rather than len(term_ids)."""
+    small_bank_uow = InMemoryUnitOfWork(terms=_bank(10))
+    round_ = await CreateGameRound(small_bank_uow).execute(mode=RoundMode.DAILY_20)
+    assert round_.term_ids is not None
+    assert len(round_.term_ids) == 10
+
+    use_case = SubmitAnswer(small_bank_uow)
+    for term_id in round_.term_ids:
+        await use_case.execute(round_.id, term_id, f"answer for {term_id}")
+
+    final_round = await small_bank_uow.rounds.by_id(round_.id)
+    assert final_round is not None
+    assert final_round.terms_remaining == 0
+    assert final_round.is_over(datetime.now(UTC)) is True
+
+    with pytest.raises(RoundOver):
+        await use_case.execute(round_.id, round_.term_ids[0], "one more")
+
+
 class FakeJudgePort:
     def __init__(
         self,

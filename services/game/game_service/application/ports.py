@@ -52,6 +52,11 @@ class TermRepository(ABC):
         """List every category slug present in the term bank — the
         collections a player can choose to play from."""
 
+    @abstractmethod
+    async def all_ids(self) -> tuple[str, ...]:
+        """Every term id in the bank, sorted — the stable input Daily 20's
+        seeded selection shuffles."""
+
 
 class RoundRepository(ABC):
     """Persist and retrieve play-through rounds."""

@@ -65,6 +65,19 @@ class ListCategories:
             return await self.uow.terms.categories()
 
 
+class ListAllTermIds:
+    """List every term id in the bank — the stable input a seeded daily
+    selection (game-service's Daily 20) shuffles."""
+
+    def __init__(self, uow: UnitOfWork) -> None:
+        self.uow = uow
+
+    async def execute(self) -> tuple[str, ...]:
+        """Return every term id, sorted."""
+        async with self.uow:
+            return await self.uow.terms.all_ids()
+
+
 class PublishTerm:
     """Create a term, or replace it if the ID already exists.
 

@@ -50,6 +50,12 @@ class TermRepository(ABC):
         """List every category slug present in the term bank."""
 
     @abstractmethod
+    async def all_ids(self) -> tuple[str, ...]:
+        """Every term id in the bank, sorted. The stable input a seeded
+        daily selection shuffles — sorted because an unstable order would
+        change the day's puzzle."""
+
+    @abstractmethod
     async def upsert(self, term: Term) -> None:
         """Create a term, or replace it if the ID already exists."""
 

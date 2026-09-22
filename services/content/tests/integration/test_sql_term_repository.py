@@ -222,3 +222,20 @@ async def test_random_falls_back_within_filters_once_excluded(
 
     assert result is not None
     assert result.id == "eligible"  # falls back within the filter, not to "ineligible"
+
+
+@pytest.mark.asyncio
+async def test_all_ids_returns_every_id_sorted(session: AsyncSession) -> None:
+    repo = SQLTermRepository(session)
+    await repo.upsert(_term("zebra"))
+    await repo.upsert(_term("apple"))
+    await session.commit()
+
+    assert await repo.all_ids() == ("apple", "zebra")
+
+
+@pytest.mark.asyncio
+async def test_all_ids_empty_when_bank_is_empty(session: AsyncSession) -> None:
+    repo = SQLTermRepository(session)
+
+    assert await repo.all_ids() == ()

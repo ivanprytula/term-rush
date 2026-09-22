@@ -36,6 +36,16 @@ class ListCategoriesReply(_message.Message):
     categories: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, categories: _Optional[_Iterable[str]] = ...) -> None: ...
 
+class ListTermIdsRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ListTermIdsReply(_message.Message):
+    __slots__ = ("term_ids",)
+    TERM_IDS_FIELD_NUMBER: _ClassVar[int]
+    term_ids: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, term_ids: _Optional[_Iterable[str]] = ...) -> None: ...
+
 class TermReply(_message.Message):
     __slots__ = ("found", "id", "term", "expansion", "definitions", "aliases", "categories", "difficulty", "examples", "related", "prerequisites", "common_mistakes")
     FOUND_FIELD_NUMBER: _ClassVar[int]

@@ -5,6 +5,7 @@ service TermService {
   rpc GetById(GetByIdRequest) returns (TermReply);
   rpc GetRandom(GetRandomRequest) returns (TermReply);
   rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesReply);
+  rpc ListTermIds(ListTermIdsRequest) returns (ListTermIdsReply);
 }
 
 message GetByIdRequest {
@@ -26,6 +27,13 @@ message ListCategoriesRequest {}
 
 message ListCategoriesReply {
   repeated string categories = 1;
+}
+
+message ListTermIdsRequest {}
+
+message ListTermIdsReply {
+  // Sorted — an unstable order would change a Daily 20 puzzle.
+  repeated string term_ids = 1;
 }
 
 message TermReply {

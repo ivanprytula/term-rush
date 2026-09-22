@@ -129,3 +129,16 @@ async def test_list_categories_returns_every_distinct_slug(term: Term) -> None:
     )
 
     assert tuple(reply.categories) == ("architecture", "python-keywords")
+
+
+@pytest.mark.asyncio
+async def test_list_term_ids_returns_every_id_sorted(term: Term) -> None:
+    other = term.model_copy(update={"id": "zebra"})
+    servicer = _servicer(InMemoryUnitOfWork(terms={term.id: term, other.id: other}))
+
+    reply = await servicer.ListTermIds(
+        term_pb2.ListTermIdsRequest(),
+        context=None,  # type: ignore
+    )
+
+    assert tuple(reply.term_ids) == ("uow", "zebra")

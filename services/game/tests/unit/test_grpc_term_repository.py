@@ -21,6 +21,8 @@ class _FakeStub:
         self.get_random_error: Exception | None = None
         self.list_categories_reply: term_pb2.ListCategoriesReply | None = None
         self.list_categories_error: Exception | None = None
+        self.list_term_ids_reply: term_pb2.ListTermIdsReply | None = None
+        self.list_term_ids_error: Exception | None = None
         self.calls: list[str] = []
         self.last_get_random_request: term_pb2.GetRandomRequest | None = None
 
@@ -47,6 +49,15 @@ class _FakeStub:
             raise self.list_categories_error
         assert self.list_categories_reply is not None
         return self.list_categories_reply
+
+    async def ListTermIds(
+        self, request: term_pb2.ListTermIdsRequest
+    ) -> term_pb2.ListTermIdsReply:
+        self.calls.append("ListTermIds")
+        if self.list_term_ids_error is not None:
+            raise self.list_term_ids_error
+        assert self.list_term_ids_reply is not None
+        return self.list_term_ids_reply
 
 
 def _repository() -> tuple[GrpcTermRepository, _FakeStub]:
@@ -231,3 +242,21 @@ async def test_categories_returns_empty_on_rpc_failure() -> None:
     stub.list_categories_error = grpc.aio.AioRpcError(code=grpc.StatusCode.UNAVAILABLE)
 
     assert await repo.categories() == ()
+
+
+@pytest.mark.asyncio
+async def test_all_ids_returns_the_reply_ids() -> None:
+    repo, stub = _repository()
+    stub.list_term_ids_reply = term_pb2.ListTermIdsReply(term_ids=["apple", "zebra"])
+
+    result = await repo.all_ids()
+
+    assert result == ("apple", "zebra")
+
+
+@pytest.mark.asyncio
+async def test_all_ids_returns_empty_on_rpc_failure() -> None:
+    repo, stub = _repository()
+    stub.list_term_ids_error = grpc.aio.AioRpcError(code=grpc.StatusCode.UNAVAILABLE)
+
+    assert await repo.all_ids() == ()
