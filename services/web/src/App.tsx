@@ -17,13 +17,12 @@ const THEME_KEY = "term-rush-theme";
 const ROUND_LENGTH = 10;
 const SURVIVAL_LIVES = 3; // mirrors constants.SURVIVAL_LIVES server-side
 
-// Boss and Daily 20 aren't in this list yet — their term-selection logic
-// (a boss-eligible filter, the shared seeded 20-term set) lands in later
-// slices; until then GetNextTerm always draws a plain random term, so
-// exposing them here would let a player "play" a mode that silently isn't
-// what its name promises. Add each mode to this list only once its own
-// slice actually implements it.
-const MODES: readonly RoundMode[] = ["classic", "sprint", "survival"];
+// Daily 20 isn't in this list yet — its term-selection logic (the shared
+// seeded 20-term set) lands in a later slice; until then GetNextTerm always
+// draws a plain random term for it, so exposing it here would let a player
+// "play" a mode that silently isn't what its name promises. Add it once
+// its own slice actually implements it.
+const MODES: readonly RoundMode[] = ["classic", "sprint", "survival", "boss"];
 
 const MODE_LABEL: Record<RoundMode, string> = {
   classic: "classic",
@@ -177,12 +176,17 @@ function RubricNote({
 function ResultPanel({
   result,
   requestedLlmGrading,
+  isBossRound,
   streamedFeedback,
   continueLabel,
   onContinue,
 }: {
   result: SubmitAnswerResponse;
   requestedLlmGrading: boolean;
+  // Boss mode's escalation is a mode policy, not the player's opt-in — the
+  // "you asked, but it was clear-cut" caveat below doesn't apply to it and
+  // needs its own message.
+  isBossRound: boolean;
   // The rationale text as it streamed in, kept on screen instead of
   // result.feedback once grading completes. They come from two separate
   // LLM calls (tool_use can't stream), so swapping one for the other at
@@ -199,10 +203,16 @@ function ResultPanel({
         [ {verdict.label} ] <span>{result.score}/100</span>
       </p>
       <RubricNote rubric={result.rubric} matchedVia={result.matched_via} />
+      {requestedLlmGrading && !llmGraded && isBossRound && (
+        <p className="text-xs text-text-muted">
+          # Boss rounds always grade with AI — the deterministic match here
+          was already clear-cut, so escalation had nothing to add.
+        </p>
+      )}
       {/* Explains why AI feedback was requested but nothing streamed — the
           escalation only fires on a PARTIAL deterministic verdict, so a
           clear match or clear miss silently skips it otherwise. */}
-      {requestedLlmGrading && !llmGraded && (
+      {requestedLlmGrading && !llmGraded && !isBossRound && (
         <p className="text-xs text-text-muted">
           # AI feedback only kicks in on ambiguous answers — this one was
           clear-cut.
@@ -488,9 +498,14 @@ export default function App() {
     if (!term || !answer.trim() || !roundId || roundComplete) return;
     setLoading(true);
     setError(null);
-    setRequestedLlmGrading(useLlmGrading);
+    // Boss mode forces LLM grading server-side regardless of what's sent
+    // (RoundMode.resolve_llm_grading) — the checkbox is hidden for it (see
+    // the pre-submit form below), so this is what actually decides whether
+    // the client takes the streaming path and shows the live rationale.
+    const effectiveLlmGrading = roundMode === "boss" || useLlmGrading;
+    setRequestedLlmGrading(effectiveLlmGrading);
 
-    if (useLlmGrading) {
+    if (effectiveLlmGrading) {
       setLiveFeedback("");
       await submitAnswerStream(
         roundId,
@@ -644,15 +659,24 @@ export default function App() {
                 className="w-full bg-transparent text-text placeholder:text-text-muted focus:outline-none"
               />
             </div>
-            <label className="flex items-center gap-2 text-sm text-text-dim">
-              <input
-                type="checkbox"
-                checked={useLlmGrading}
-                onChange={(e) => setUseLlmGrading(e.target.checked)}
-                className="accent-phosphor bg-surface border-surface-border"
-              />
-              get AI feedback on ambiguous answers
-            </label>
+            {/* Boss mode forces LLM grading server-side — an unchecked,
+                ignorable checkbox here would misrepresent what actually
+                happens, so it's replaced with a plain statement of fact. */}
+            {roundMode === "boss" ? (
+              <p className="text-sm text-text-dim">
+                AI grading is always on for boss rounds.
+              </p>
+            ) : (
+              <label className="flex items-center gap-2 text-sm text-text-dim">
+                <input
+                  type="checkbox"
+                  checked={useLlmGrading}
+                  onChange={(e) => setUseLlmGrading(e.target.checked)}
+                  className="accent-phosphor bg-surface border-surface-border"
+                />
+                get AI feedback on ambiguous answers
+              </label>
+            )}
             {liveFeedback !== null && (
               <p className="text-sm text-text-dim italic min-h-5">
                 {liveFeedback || "thinking…"}
@@ -672,6 +696,7 @@ export default function App() {
           <ResultPanel
             result={result}
             requestedLlmGrading={requestedLlmGrading}
+            isBossRound={roundMode === "boss"}
             streamedFeedback={liveFeedback}
             continueLabel={roundComplete ? "see results" : "next term"}
             onContinue={
