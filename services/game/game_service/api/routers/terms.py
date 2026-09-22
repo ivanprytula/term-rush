@@ -19,7 +19,7 @@ from game_service.api.schemas import TermPromptResponse
 from game_service.api.schemas import TermStatsResponse
 from game_service.application.ports import TermStatsRepository
 from game_service.application.ports import UnitOfWork
-from game_service.application.use_cases import GetRandomTerm
+from game_service.application.use_cases import GetNextTerm
 from game_service.application.use_cases import ListTermCategories
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ async def get_random_term(
     if given, scopes the pick to a player-chosen collection (a category
     slug from GET /terms/categories).
     """
-    use_case = GetRandomTerm(uow)
+    use_case = GetNextTerm(uow)
     try:
         term = await use_case.execute(round_id, category)
         return TermPromptResponse.from_term(term)

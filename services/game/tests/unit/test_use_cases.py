@@ -11,7 +11,7 @@ from datetime import timedelta
 import pytest
 
 from game_service.application.use_cases import CreateGameRound
-from game_service.application.use_cases import GetRandomTerm
+from game_service.application.use_cases import GetNextTerm
 from game_service.application.use_cases import GetRound
 from game_service.application.use_cases import ListTermCategories
 from game_service.application.use_cases import SubmitAnswer
@@ -186,7 +186,7 @@ async def test_submit_answer_records_cached_outcome_again(
 @pytest.mark.asyncio
 async def test_get_random_term_returns_a_seeded_term(uow: InMemoryUnitOfWork) -> None:
     """Fetching a random term returns one from the term bank."""
-    term = await GetRandomTerm(uow).execute()
+    term = await GetNextTerm(uow).execute()
     assert term.id == "uow"
 
 
@@ -195,7 +195,7 @@ async def test_get_random_term_empty_bank_raises() -> None:
     """Fetching a random term from an empty bank raises ValueError."""
     empty_uow = InMemoryUnitOfWork()
     with pytest.raises(ValueError, match="No terms"):
-        await GetRandomTerm(empty_uow).execute()
+        await GetNextTerm(empty_uow).execute()
 
 
 @pytest.mark.asyncio
@@ -217,7 +217,7 @@ async def test_get_random_term_scopes_to_category() -> None:
     )
     uow = InMemoryUnitOfWork(terms={"uow": uow_term, "lambda": lambda_term})
 
-    term = await GetRandomTerm(uow).execute(category="python-keywords")
+    term = await GetNextTerm(uow).execute(category="python-keywords")
 
     assert term.id == "lambda"
 
@@ -228,7 +228,7 @@ async def test_get_random_term_raises_when_category_has_no_terms(
 ) -> None:
     """A category with no matching terms raises, same as an empty bank."""
     with pytest.raises(ValueError, match="No terms"):
-        await GetRandomTerm(uow).execute(category="nonexistent-category")
+        await GetNextTerm(uow).execute(category="nonexistent-category")
 
 
 @pytest.mark.asyncio

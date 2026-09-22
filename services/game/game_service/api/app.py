@@ -17,6 +17,7 @@ from game_service.api.routers import leaderboard
 from game_service.api.routers import terms
 from game_service.domain.round import RoundExpired
 from game_service.domain.round import RoundFull
+from game_service.domain.round import RoundOver
 from game_service.infrastructure.answer_graded_stats import (
     stop_consumer_task as stop_stats_consumer_task,
 )
@@ -143,4 +144,15 @@ async def round_expired_handler(_request: Request, _exc: RoundExpired) -> JSONRe
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={"error": "Round has expired", "status_code": 422},
+    )
+
+
+@app.exception_handler(RoundOver)
+async def round_over_handler(_request: Request, _exc: RoundOver) -> JSONResponse:
+    """A round has reached its mode's terminal state (Survival's lives
+    exhausted, a Boss round's single answer already submitted, Daily 20's
+    term cap reached) — reject further answers."""
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={"error": "Round is over", "status_code": 422},
     )
