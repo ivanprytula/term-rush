@@ -143,9 +143,12 @@ a live container.
 entities, SessionRepository port + adapters, `GET /sessions/{id}`;
 verified state survives a container restart.
 
-**Phase 1f (React client)** — ✅ Complete (minimal scope). `services/web/`
-covers the core submit/grade loop against the real API. Prototype parity
-(falling terms, voice input, settings) not yet scheduled — see
+**Phase 1f (React client)** — ✅ Complete. `services/web/` covers the core
+submit/grade loop, browser-local settings, voice-language selection,
+REST-backed Sprint duration, and live score/streak feedback. Playwright covers
+settings persistence, the `/game-config` boundary, and HUD transitions.
+ commit message for `/game-config` boundary and UI part: feat: add /game-config endpoint for gameplay configuration
+Falling-term arcade gameplay remains deferred — see
 [Next Steps](./README.md#next-steps).
 
 See [Next Steps](./README.md#next-steps) in the README for the full roadmap.

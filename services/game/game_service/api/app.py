@@ -12,6 +12,7 @@ from opentelemetry.baggage import set_baggage
 from game_service.api import dependencies
 from game_service.api.dependencies import _init_session_factory
 from game_service.api.routers import answers
+from game_service.api.routers import config
 from game_service.api.routers import game_rounds
 from game_service.api.routers import leaderboard
 from game_service.api.routers import terms
@@ -76,6 +77,7 @@ async def inject_task_name(request: Request, call_next):
 
 
 app.include_router(answers.router)
+app.include_router(config.router)
 app.include_router(game_rounds.router)
 app.include_router(leaderboard.router)
 app.include_router(terms.router)

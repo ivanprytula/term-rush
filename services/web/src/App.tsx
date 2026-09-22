@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff } from "lucide-react";
 import {
   createRoundGameRoundsPost,
+  getGameConfigGameConfigGet,
   getRandomTermTermsRandomGet,
   getTermCategoriesTermsCategoriesGet,
   submitAnswerGameRoundsRoundIdAnswersSubmitPost,
 } from "./client";
 import type {
+  GameConfigResponse,
   RoundMode,
   SubmitAnswerResponse,
   TermPromptResponse,
@@ -16,8 +18,14 @@ import { useSprintCountdown } from "./useSprintCountdown";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 
 const THEME_KEY = "term-rush-theme";
+const VOICE_LANGUAGE_KEY = "term-rush-voice-language";
+const SPRINT_DURATION_KEY = "term-rush-sprint-duration";
 const ROUND_LENGTH = 10;
 const SURVIVAL_LIVES = 3; // mirrors constants.SURVIVAL_LIVES server-side
+const VOICE_LANGUAGES = ["en-US", "en-GB"] as const;
+const SPRINT_DURATIONS = [10, 30, 60, 120, 300] as const;
+type VoiceLanguage = (typeof VOICE_LANGUAGES)[number];
+type SprintDuration = (typeof SPRINT_DURATIONS)[number];
 
 const MODES: readonly RoundMode[] = [
   "classic",
@@ -56,6 +64,20 @@ function getInitialTheme(): Theme {
     : "phosphor";
 }
 
+function getInitialVoiceLanguage(): VoiceLanguage {
+  const stored = localStorage.getItem(VOICE_LANGUAGE_KEY);
+  return (VOICE_LANGUAGES as readonly string[]).includes(stored ?? "")
+    ? (stored as VoiceLanguage)
+    : "en-US";
+}
+
+function getInitialSprintDuration(): SprintDuration {
+  const stored = Number(localStorage.getItem(SPRINT_DURATION_KEY));
+  return (SPRINT_DURATIONS as readonly number[]).includes(stored)
+    ? (stored as SprintDuration)
+    : 60;
+}
+
 function ThemeToggle({
   theme,
   onChange,
@@ -68,7 +90,7 @@ function ThemeToggle({
       value={theme}
       onChange={(e) => onChange(e.target.value as Theme)}
       aria-label="Switch theme"
-      className="fixed top-4 right-4 text-xs text-text-muted hover:text-text border border-surface-border hover:border-phosphor px-2 py-1 transition bg-surface"
+      className="text-xs text-text-muted hover:text-text border border-surface-border hover:border-phosphor px-2 py-1 transition bg-surface"
     >
       {THEMES.map((t) => (
         <option key={t} value={t}>
@@ -76,6 +98,61 @@ function ThemeToggle({
         </option>
       ))}
     </select>
+  );
+}
+
+function SettingsPanel({
+  voiceLanguage,
+  sprintDuration,
+  sprintDurations,
+  onVoiceLanguageChange,
+  onSprintDurationChange,
+}: {
+  voiceLanguage: VoiceLanguage;
+  sprintDuration: number;
+  sprintDurations: readonly number[];
+  onVoiceLanguageChange: (language: VoiceLanguage) => void;
+  onSprintDurationChange: (duration: SprintDuration) => void;
+}) {
+  return (
+    <details className="relative bg-surface border border-surface-border text-sm text-text-dim">
+      <summary className="cursor-pointer select-none px-3 py-1.5 font-bold text-text">
+        settings
+      </summary>
+      <div className="absolute left-0 mt-2 w-56 space-y-3 bg-surface border border-surface-border p-3">
+        <label className="flex items-center justify-between gap-3">
+          voice language
+          <select
+            value={voiceLanguage}
+            onChange={(event) =>
+              onVoiceLanguageChange(event.target.value as VoiceLanguage)
+            }
+            aria-label="Voice language"
+            className="bg-surface border border-surface-border text-text px-2 py-1"
+          >
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+          </select>
+        </label>
+        <label className="flex items-center justify-between gap-3">
+          Sprint duration
+          <select
+            value={sprintDuration}
+            onChange={(event) =>
+              onSprintDurationChange(Number(event.target.value) as SprintDuration)
+            }
+            aria-label="Sprint duration"
+            className="bg-surface border border-surface-border text-text px-2 py-1"
+          >
+            {sprintDurations.map((duration) => (
+              <option key={duration} value={duration}>
+                {duration}s
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </details>
   );
 }
 
@@ -339,6 +416,20 @@ export default function App() {
   // UUID allowed before.
   const [roundId, setRoundId] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const [voiceLanguage, setVoiceLanguage] = useState<VoiceLanguage>(
+    getInitialVoiceLanguage,
+  );
+  const [sprintDuration, setSprintDuration] = useState<SprintDuration>(
+    getInitialSprintDuration,
+  );
+  const [gameConfig, setGameConfig] = useState<GameConfigResponse | null>(null);
+  useEffect(() => {
+    localStorage.setItem(VOICE_LANGUAGE_KEY, voiceLanguage);
+  }, [voiceLanguage]);
+
+  useEffect(() => {
+    localStorage.setItem(SPRINT_DURATION_KEY, String(sprintDuration));
+  }, [sprintDuration]);
   const [term, setTerm] = useState<TermPromptResponse | null>(null);
   const [answer, setAnswer] = useState("");
   const [result, setResult] = useState<SubmitAnswerResponse | null>(null);
@@ -364,14 +455,19 @@ export default function App() {
   // The round's own mode, as returned by the server — distinct from
   // selectedMode (the picker for the *next* round to start).
   const [roundMode, setRoundMode] = useState<RoundMode>("classic");
-  // Survival only, derived client-side from answers (SURVIVAL_LIVES minus
+  const survivalLives = gameConfig?.survival_lives ?? SURVIVAL_LIVES;
+  const dailyTermLimit = gameConfig?.daily_term_count ?? 20;
+  const answerMaxLength = gameConfig?.answer_max_length ?? 512;
+  const sprintDurationOptions =
+    gameConfig?.sprint.duration_options_seconds ?? SPRINT_DURATIONS;
+  // Survival only, derived client-side from answers (configured lives minus
   // incorrect verdicts so far) — the server stays authoritative regardless
   // (still 422s past zero lives), same trust split Sprint's countdown uses.
   const livesRemaining =
     roundMode === "survival"
       ? Math.max(
           0,
-          SURVIVAL_LIVES -
+          survivalLives -
             answers.filter((a) => a.verdict === "incorrect").length,
         )
       : null;
@@ -400,7 +496,7 @@ export default function App() {
   // rAF countdown below whenever a fresh round starts.
   const [serverRemaining, setServerRemaining] = useState<number | null>(null);
   const remainingSeconds = useSprintCountdown(serverRemaining);
-  const speech = useSpeechRecognition();
+  const speech = useSpeechRecognition(voiceLanguage);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const sprintExpired = roundMode === "sprint" && remainingSeconds === 0;
 
@@ -425,6 +521,11 @@ export default function App() {
     daily_20: termsRemaining === 0,
   };
   const roundComplete = ROUND_END[roundMode];
+  const totalScore = answers.reduce((sum, current) => sum + current.score, 0);
+  const currentStreak = answers.reduce(
+    (streak, current) => (current.verdict === "correct" ? streak + 1 : 0),
+    0,
+  );
 
   useEffect(() => {
     if (!term || result || roundComplete) speech.stop();
@@ -496,7 +597,12 @@ export default function App() {
     setError(null);
     setRoundCategory(selectedCategory);
     const { data } = await createRoundGameRoundsPost({
-      body: { mode: selectedMode },
+      body: {
+        mode: selectedMode,
+        ...(selectedMode === "sprint"
+          ? { duration_seconds: sprintDuration }
+          : {}),
+      },
     });
     if (!data) {
       setError({ message: "Could not start a round.", retryAction: "load" });
@@ -522,6 +628,14 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    getGameConfigGameConfigGet()
+      .then(({ data }) => {
+        if (data) setGameConfig(data);
+      })
+      .catch(() => {});
+  }, []);
 
   // Once per mount, not per round — the collection list doesn't change
   // mid-session. A failed fetch just means no picker renders (CategoryPicker
@@ -604,7 +718,16 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-ground text-text flex items-center justify-center p-4">
-      <ThemeToggle theme={theme} onChange={setTheme} />
+      <div className="fixed top-4 right-4 z-20 flex items-start gap-2">
+        <SettingsPanel
+          voiceLanguage={voiceLanguage}
+          sprintDuration={sprintDuration}
+          sprintDurations={sprintDurationOptions}
+          onVoiceLanguageChange={setVoiceLanguage}
+          onSprintDurationChange={setSprintDuration}
+        />
+        <ThemeToggle theme={theme} onChange={setTheme} />
+      </div>
       <main className="w-full max-w-md space-y-6">
         <h1 className="text-2xl font-bold tracking-tight text-center">
           <span className="text-phosphor">~/</span>term-rush
@@ -637,40 +760,57 @@ export default function App() {
         )}
 
         {started && !roundComplete && roundMode === "classic" && (
-          <p className="text-sm text-text-dim text-center">
-            term {Math.min(answers.length + 1, ROUND_LENGTH)}/{ROUND_LENGTH}
-          </p>
+          <div className="flex items-center justify-between text-sm text-text-dim">
+            <span>
+              term {Math.min(answers.length + 1, ROUND_LENGTH)}/{ROUND_LENGTH}
+            </span>
+            <span>
+              score {totalScore} · streak {currentStreak}
+            </span>
+          </div>
         )}
         {started && !roundComplete && roundMode === "sprint" && (
           // aria-live: the number changes every frame — announcing every
           // tick would spam a screen reader, so this is visual-only; the
           // time's-up screen (an ordinary heading) is what gets announced.
-          <p
-            className="text-sm text-text-dim text-center tabular-nums"
-            aria-hidden="true"
-          >
-            {"⏱ "}
-            {Math.ceil(remainingSeconds ?? 0)}s
-          </p>
+          <div className="flex items-center justify-between text-sm text-text-dim">
+            <p className="tabular-nums" aria-hidden="true">
+              {"⏱ "}
+              {Math.ceil(remainingSeconds ?? 0)}s
+            </p>
+            <p>
+              score {totalScore} · streak {currentStreak}
+            </p>
+          </div>
         )}
         {started && !roundComplete && roundMode === "survival" && (
-          <p className="text-sm text-text-dim text-center">
-            <span aria-hidden="true">
-              {"♥".repeat(livesRemaining ?? 0)}
-              {"♡".repeat(SURVIVAL_LIVES - (livesRemaining ?? 0))}
-            </span>
-            {/* aria-live: unlike the countdown, this changes once per
-                answer, not per frame — worth announcing, not spam. */}
-            <span className="sr-only" aria-live="polite">
-              {livesRemaining ?? 0} lives remaining
-            </span>
-          </p>
+          <div className="flex items-center justify-between text-sm text-text-dim">
+            <p>
+              <span aria-hidden="true">
+                {"♥".repeat(livesRemaining ?? 0)}
+                {"♡".repeat(survivalLives - (livesRemaining ?? 0))}
+              </span>
+              {/* aria-live: unlike the countdown, this changes once per
+                  answer, not per frame — worth announcing, not spam. */}
+              <span className="sr-only" aria-live="polite">
+                {livesRemaining ?? 0} lives remaining
+              </span>
+            </p>
+            <p>
+              score {totalScore} · streak {currentStreak}
+            </p>
+          </div>
         )}
         {started && !roundComplete && roundMode === "daily_20" && (
-          <p className="text-sm text-text-dim text-center">
-            term {Math.min(answers.length + 1, dailyTermCount ?? 20)}/
-            {dailyTermCount ?? 20}
-          </p>
+          <div className="flex items-center justify-between text-sm text-text-dim">
+            <span>
+              term {Math.min(answers.length + 1, dailyTermCount ?? dailyTermLimit)}/
+              {dailyTermCount ?? dailyTermLimit}
+            </span>
+            <span>
+              score {totalScore} · streak {currentStreak}
+            </span>
+          </div>
         )}
 
         {error && (
@@ -719,7 +859,7 @@ export default function App() {
                 ref={answerInputRef}
                 autoFocus
                 rows={2}
-                maxLength={512}
+                maxLength={answerMaxLength}
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
                 onKeyDown={(e) => {
@@ -761,7 +901,8 @@ export default function App() {
             <div className="flex items-center justify-between text-xs text-text-muted">
               <span>Enter = new line</span>
               <span>
-                <kbd>Ctrl/Cmd+Enter</kbd> = submit · {answer.length}/512
+                <kbd>Ctrl/Cmd+Enter</kbd> = submit · {answer.length}/
+                {answerMaxLength}
               </span>
             </div>
             <p className="min-h-5 text-xs text-text-muted" aria-live="polite">

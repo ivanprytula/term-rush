@@ -69,6 +69,45 @@ class CreateRoundRequest(BaseModel):
     )
 
 
+class GameModeConfigResponse(BaseModel):
+    """Client-facing capabilities and limits for one game mode."""
+
+    mode: RoundMode
+    max_answers: int | None = None
+    timed: bool
+    llm_grading: str
+
+
+class SprintConfigResponse(BaseModel):
+    """Supported Sprint duration values and bounds."""
+
+    default_duration_seconds: int
+    min_duration_seconds: int
+    max_duration_seconds: int
+    duration_options_seconds: list[int]
+
+
+class RubricConfigResponse(BaseModel):
+    """Point weights used by the answer rubric."""
+
+    concept: int
+    expansion: int
+    purpose: int
+    example: int
+
+
+class GameConfigResponse(BaseModel):
+    """Read-only gameplay configuration for clients."""
+
+    modes: list[GameModeConfigResponse]
+    sprint: SprintConfigResponse
+    survival_lives: int
+    daily_term_count: int
+    answer_max_length: int
+    score_max: int
+    rubric: RubricConfigResponse
+
+
 class SubmitAnswerRequest(BaseModel):
     """Answer submission for grading.
 

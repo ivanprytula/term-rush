@@ -19,7 +19,8 @@ minimal shipping product.
 - **Infrastructure:** In-memory adapters for stateless deployments; SQL
   adapters (SQLAlchemy + Alembic) for terms and sessions in PostgreSQL.
 - **API:** FastAPI — `POST /sessions/{id}/answers/submit`, `GET
-  /sessions/{id}`, `GET /terms/random`.
+  /sessions/{id}`, `GET /terms/random`, and `GET /game-config` for the
+  client-facing gameplay contract.
 - **Architecture:** Clean Architecture with machine-enforced layering via
   `import-linter`.
 - **Testing:** 66+ tests with property-based testing (Hypothesis) and
@@ -31,9 +32,9 @@ The original `index.html` prototype lives in `.local-dev/` (arcade UX:
 falling terms, voice input, score/streak/timer) and stays until the React
 client reaches parity with it.
 
-`services/web/` is a minimal React client (Vite + React 19 + TypeScript +
-Tailwind v4) covering the core loop: fetch a random term, submit an answer
-against the real API, show the graded result. It doesn't yet replicate the
+`services/web/` is a React client (Vite + React 19 + TypeScript + Tailwind v4)
+covering the core loop, browser-local settings, configurable Sprint duration,
+voice input, and live score/streak feedback. It doesn't yet replicate the
 arcade presentation — see [services/web/README.md](./services/web/README.md)
 for dev setup and [docs/game-rules.md](./docs/game-rules.md) for how
 scoring works (also readable in-app via the "How to play" panel).
@@ -73,11 +74,11 @@ inventory.
 - ~~**Phase 1e:** Session persistence (SQLAlchemy Session entity,
   Alembic)~~ — done: session state survives a container restart, verified
   live.
-- ~~**Phase 1f:** React client~~ — done (minimal scope): `services/web/`
-  covers the core submit/grade loop against the real API. Deleting
-  `.local-dev/index.html` is deferred until the client reaches parity with
-  its arcade UX (falling terms, voice input, settings, score/streak/timer)
-  — not yet scheduled to a phase.
+- ~~**Phase 1f:** React client~~ — done: `services/web/` covers the core
+  submit/grade loop, browser-local settings, voice input, configurable Sprint
+  duration, and live score/streak/timer feedback. Deleting
+  `.local-dev/index.html` remains deferred until falling-term arcade gameplay
+  is implemented.
 - ~~**Phase 2:** LLM-based grading (Claude), streaming rubric feedback~~ —
   done: grading quality exceeds the deterministic rubric (concept, purpose,
   and example scored, not just expansion), feedback streams live over SSE,
@@ -98,8 +99,10 @@ inventory.
 
 Later / not yet scheduled to a phase:
 
-- React client parity with the `.local-dev` prototype (falling terms, voice
-  input, settings, score/streak/timer), then delete the prototype.
+- Falling-term arcade gameplay and deletion of `.local-dev/index.html`.
+- Difficulty selection/filtering. The REST config contract exposes gameplay
+  limits, but the backend does not yet expose a player-facing difficulty
+  selection contract.
 - ~~Game modes: Sprint, Survival, Boss Round, Daily 20~~ — done: all four
   shipped, see
   [game-rules.md § Game modes](docs/game-rules.md#game-modes).

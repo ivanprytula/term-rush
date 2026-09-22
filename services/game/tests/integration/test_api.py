@@ -124,6 +124,30 @@ def test_health(client: TestClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_game_config_exposes_client_gameplay_contract(client: TestClient) -> None:
+    """GET /game-config exposes server-owned limits and capabilities."""
+    response = client.get("/game-config")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sprint"] == {
+        "default_duration_seconds": 60,
+        "min_duration_seconds": 10,
+        "max_duration_seconds": 300,
+        "duration_options_seconds": [10, 30, 60, 120, 300],
+    }
+    assert body["survival_lives"] == 3
+    assert body["daily_term_count"] == 20
+    assert body["answer_max_length"] == 512
+    assert body["score_max"] == 100
+    assert body["rubric"] == {
+        "concept": 40,
+        "expansion": 30,
+        "purpose": 20,
+        "example": 10,
+    }
+
+
 def test_ready(client: TestClient) -> None:
     """GET /ready returns ready when no Kafka consumer is configured."""
     response = client.get("/ready")

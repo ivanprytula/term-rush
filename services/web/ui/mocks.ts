@@ -39,7 +39,13 @@ export async function mockBackend(
     // exercising the picker itself overrides this.
     categories?: string[];
   } = {},
-): Promise<{ lastRandomTermCategory: () => string | null }> {
+): Promise<{
+  lastRandomTermCategory: () => string | null;
+  lastRoundRequest: () => {
+    mode?: "classic" | "sprint" | "survival" | "boss" | "daily_20";
+    duration_seconds?: number;
+  } | null;
+}> {
   const gradeRule = options.gradeRule ?? defaultGradeRule;
   const sprintDuration =
     typeof options.sprintDurationSeconds === "function"
@@ -49,6 +55,37 @@ export async function mockBackend(
   let roundCounter = 0;
   let termIndex = 0;
   let lastRandomTermCategory: string | null = null;
+  let lastRoundRequest: {
+    mode?: "classic" | "sprint" | "survival" | "boss" | "daily_20";
+    duration_seconds?: number;
+  } | null = null;
+
+  await page.route("**/game-config", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        modes: [
+          { mode: "classic", max_answers: 200, timed: false, llm_grading: "optional" },
+          { mode: "sprint", timed: true, llm_grading: "disabled" },
+          { mode: "survival", timed: false, llm_grading: "optional" },
+          { mode: "boss", max_answers: 1, timed: false, llm_grading: "forced" },
+          { mode: "daily_20", max_answers: 20, timed: false, llm_grading: "disabled" },
+        ],
+        sprint: {
+          default_duration_seconds: 60,
+          min_duration_seconds: 10,
+          max_duration_seconds: 300,
+          duration_options_seconds: [10, 30, 60, 120, 300],
+        },
+        survival_lives: 3,
+        daily_term_count: 20,
+        answer_max_length: 512,
+        score_max: 100,
+        rubric: { concept: 40, expansion: 30, purpose: 20, example: 10 },
+      }),
+    });
+  });
 
   await page.route("**/game-rounds", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
@@ -56,6 +93,7 @@ export async function mockBackend(
       mode?: "classic" | "sprint" | "survival" | "boss" | "daily_20";
       duration_seconds?: number;
     } | null;
+    lastRoundRequest = body;
     roundCounter += 1;
     termIndex = 0;
     const mode = body?.mode ?? "classic";
@@ -68,7 +106,11 @@ export async function mockBackend(
         created_at: new Date().toISOString(),
         answers: [],
         mode,
-        remaining_seconds: isSprint ? sprintDuration(roundCounter) : null,
+        remaining_seconds: isSprint
+          ? options.sprintDurationSeconds !== undefined
+            ? sprintDuration(roundCounter)
+            : body?.duration_seconds ?? 60
+          : null,
         is_over: false,
         lives_remaining: mode === "survival" ? 3 : null,
         terms_remaining: mode === "daily_20" ? 20 : null,
@@ -153,5 +195,8 @@ export async function mockBackend(
     });
   });
 
-  return { lastRandomTermCategory: () => lastRandomTermCategory };
+  return {
+    lastRandomTermCategory: () => lastRandomTermCategory,
+    lastRoundRequest: () => lastRoundRequest,
+  };
 }

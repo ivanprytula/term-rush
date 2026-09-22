@@ -48,7 +48,7 @@ function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null 
   return window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null;
 }
 
-export function useSpeechRecognition() {
+export function useSpeechRecognition(language = "en-US") {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const shouldKeepListeningRef = useRef(false);
   const restartTimeoutRef = useRef<number | null>(null);
@@ -60,6 +60,10 @@ export function useSpeechRecognition() {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (recognitionRef.current) recognitionRef.current.lang = language;
+  }, [language]);
 
   useEffect(() => {
     return () => {
@@ -79,7 +83,7 @@ export function useSpeechRecognition() {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.lang = "en-US";
+      recognition.lang = language;
       recognition.onstart = () => {
         setIsListening(true);
         setError(null);
@@ -131,7 +135,7 @@ export function useSpeechRecognition() {
     } catch {
       setError("Voice input is already starting.");
     }
-  }, []);
+  }, [language]);
 
   const stop = useCallback(() => {
     shouldKeepListeningRef.current = false;

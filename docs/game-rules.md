@@ -8,8 +8,9 @@ feedback immediately, then move to the next term.
 
 - **Classic** — untimed, one term at a time, no cap besides a generous
   safety ceiling. The default.
-- **Sprint** — a 60-second countdown starts on round creation. The round
-  ends when the timer expires, regardless of how many terms you've
+- **Sprint** — a countdown starts on round creation. The browser setting
+  offers 10, 30, 60, 120, or 300 seconds; 60 seconds is the default. The
+  round ends when the timer expires, regardless of how many terms you've
   answered. AI feedback is unavailable — the streaming latency works
   against a timed mode's point.
 - **Survival** — 3 lives. Each **Incorrect** verdict costs one life;
@@ -44,6 +45,11 @@ Grading always starts deterministic — exact match, known alias, or fuzzy
 text similarity against the expansion — and only the Expansion component
 can score there; Concept/Purpose/Example stay 0 unless the LLM judge grades
 the answer.
+
+The active round HUD shows cumulative score and current streak. Score is the
+sum of server-returned answer scores. A streak counts consecutive **Correct**
+verdicts and resets on **Partial** or **Incorrect**. A streak does not change
+the score.
 
 ## Getting AI feedback
 
@@ -95,8 +101,16 @@ Each new term avoids ones you've already answered this session — no
 back-to-back repeats mid-round. Once every term in the bank has come up,
 repeats resume (there's nothing else left to show).
 
+## Browser settings
+
+Theme, voice language, and Sprint duration are stored in the current browser's
+local storage. They are preferences, not player account data. Voice language
+offers English (US) and English (UK). Authoritative gameplay limits are served
+by `GET /game-config`.
+
 ## What's not here yet
 
-No streak bonus, no login (so no per-player Daily 20 lock or persisted
-best-times), no spaced repetition — those are on the
+No streak score bonus, no login (so no per-player Daily 20 lock or persisted
+best-times), no falling-term arcade gameplay, no difficulty selection, and no
+spaced repetition — those are on the
 [roadmap](../README.md#next-steps).
