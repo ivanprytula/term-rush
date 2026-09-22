@@ -100,7 +100,9 @@ Later / not yet scheduled to a phase:
 
 - React client parity with the `.local-dev` prototype (falling terms, voice
   input, settings, score/streak/timer), then delete the prototype.
-- Game modes: Sprint, Survival, Boss Round, Daily 20.
+- ~~Game modes: Sprint, Survival, Boss Round, Daily 20~~ — done: all four
+  shipped, see
+  [game-rules.md § Game modes](docs/game-rules.md#game-modes).
 - Separate term knowledge from presentation: term, aliases, explanation, examples, difficulty, tags, prerequisites.
 - Spaced repetition (FSRS/SM-2 style) instead of repeating random terms.
 - Score semantic quality, not only string similarity.
