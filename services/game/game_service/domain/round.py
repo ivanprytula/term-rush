@@ -19,12 +19,50 @@ from game_service.domain.outcome import MatchedVia
 from game_service.domain.outcome import Verdict
 
 
+class LlmGradingPolicy(StrEnum):
+    """Whether a mode lets the player's use_llm_grading opt-in through."""
+
+    OPT_IN = "opt_in"
+    FORCED_OFF = "forced_off"
+    FORCED_ON = "forced_on"
+
+
 class RoundMode(StrEnum):
     """Classic: untimed, capped only by ROUND_MAX_ANSWERS. Sprint: a fixed
-    countdown: see GameRound.started_at/duration_seconds."""
+    countdown (started_at/duration_seconds). Survival: 3 lives, ends when
+    they hit 0 (lives_remaining). Boss: exactly one boss-eligible term, ends
+    after that one answer. Daily 20: a shared, deterministic 20-term set for
+    the calendar date (term_ids), ends after 20 answers."""
 
     CLASSIC = "classic"
     SPRINT = "sprint"
+    SURVIVAL = "survival"
+    BOSS = "boss"
+    DAILY_20 = "daily_20"
+
+    @property
+    def llm_grading_policy(self) -> LlmGradingPolicy:
+        """Sprint forces grading off — SSE latency works against a timed
+        mode's point. Boss forces it on — one term, one answer, the four-part
+        rubric is the point. Daily 20 forces it off — a shared, comparable
+        puzzle needs every player graded the same deterministic way. Classic
+        and Survival honor the player's own opt-in."""
+        return {
+            RoundMode.SPRINT: LlmGradingPolicy.FORCED_OFF,
+            RoundMode.BOSS: LlmGradingPolicy.FORCED_ON,
+            RoundMode.DAILY_20: LlmGradingPolicy.FORCED_OFF,
+        }.get(self, LlmGradingPolicy.OPT_IN)
+
+    def resolve_llm_grading(self, requested: bool) -> bool:
+        """Apply this mode's LLM-grading policy to the player's opt-in.
+        Never raises: a client that always sends use_llm_grading=true must
+        not need mode-aware logic to avoid an error."""
+        policy = self.llm_grading_policy
+        if policy is LlmGradingPolicy.FORCED_OFF:
+            return False
+        if policy is LlmGradingPolicy.FORCED_ON:
+            return True
+        return requested
 
 
 class RoundFull(Exception):
@@ -33,6 +71,14 @@ class RoundFull(Exception):
 
 class RoundExpired(Exception):
     """Raised when a Sprint round's timer has run out."""
+
+
+class RoundOver(Exception):
+    """Raised when a round has reached its mode's terminal state and can
+    accept no further answers: Survival's lives exhausted, a Boss round's
+    single answer already submitted, Daily 20's 20-term cap reached. Sprint
+    keeps its own RoundExpired — the timer is a distinct enough cause to
+    name separately, and its 422 contract predates this."""
 
 
 class SubmittedAnswer(BaseModel):
@@ -66,16 +112,23 @@ class GameRound(BaseModel):
         ge=constants.MIN_SPRINT_DURATION_SECONDS,
         le=constants.MAX_SPRINT_DURATION_SECONDS,
     )
+    # Daily 20 only; None elsewhere. The day's term ids, snapshotted at
+    # creation (not re-derived on read) so the round stays internally
+    # consistent even if the term bank changes mid-day.
+    term_ids: tuple[str, ...] | None = None
 
     @staticmethod
     def start(
         now: datetime,
         mode: RoundMode = RoundMode.CLASSIC,
         duration_seconds: int | None = None,
+        term_ids: tuple[str, ...] | None = None,
     ) -> GameRound:
         """Begin a new round with a server-minted id.
 
-        duration_seconds is ignored outside Sprint mode.
+        duration_seconds is ignored outside Sprint mode. term_ids is
+        ignored outside Daily 20 mode (it should be the caller's seeded
+        selection for today, computed once at creation).
         """
         is_sprint = mode is RoundMode.SPRINT
         if is_sprint and duration_seconds is None:
@@ -86,6 +139,7 @@ class GameRound(BaseModel):
             mode=mode,
             started_at=now if is_sprint else None,
             duration_seconds=duration_seconds if is_sprint else None,
+            term_ids=term_ids if mode is RoundMode.DAILY_20 else None,
         )
 
     @property
@@ -110,17 +164,55 @@ class GameRound(BaseModel):
         remaining = self.remaining_seconds(now)
         return remaining is not None and remaining <= 0
 
+    @property
+    def lives_remaining(self) -> int | None:
+        """Survival only; None outside it, same shape as remaining_seconds
+        for Sprint. Derived from the answer log, never stored — an
+        INCORRECT verdict costs one life, PARTIAL/CORRECT cost nothing."""
+        if self.mode is not RoundMode.SURVIVAL:
+            return None
+        lost = sum(1 for a in self.answers if a.verdict is Verdict.INCORRECT)
+        return max(0, constants.SURVIVAL_LIVES - lost)
+
+    @property
+    def terms_remaining(self) -> int | None:
+        """Daily 20 only; None outside it. How many of the day's 20 terms
+        are left to answer."""
+        if self.mode is not RoundMode.DAILY_20:
+            return None
+        return constants.DAILY_20_ROUND_SIZE - len(self.answers)
+
+    def is_over(self, now: datetime) -> bool:
+        """Whether this round has reached its terminal state, whatever ends
+        it: Sprint's expired timer, Survival's exhausted lives, Boss's
+        single answer, Daily 20's term cap. Classic never ends server-side
+        (the client caps it at ROUND_LENGTH)."""
+        if self.mode is RoundMode.SPRINT:
+            return self.is_expired(now)
+        if self.mode is RoundMode.SURVIVAL:
+            return self.lives_remaining == 0
+        if self.mode is RoundMode.BOSS:
+            return len(self.answers) >= constants.BOSS_ROUND_SIZE
+        if self.mode is RoundMode.DAILY_20:
+            return len(self.answers) >= constants.DAILY_20_ROUND_SIZE
+        return False
+
     def record(self, answer: SubmittedAnswer, now: datetime) -> GameRound:
         """Return a new GameRound with the answer appended.
 
         Frozen like Term/GradeOutcome: callers replace, never mutate in place.
 
         Raises:
-            RoundFull: the round already holds ROUND_MAX_ANSWERS answers.
             RoundExpired: a Sprint round's timer has run out.
+            RoundOver: another mode's terminal state has been reached
+                (Survival out of lives, Boss already answered, Daily 20
+                at its term cap).
+            RoundFull: the round already holds ROUND_MAX_ANSWERS answers.
         """
         if self.is_expired(now):
             raise RoundExpired(self.id)
+        if self.is_over(now):
+            raise RoundOver(self.id)
         if len(self.answers) >= constants.ROUND_MAX_ANSWERS:
             raise RoundFull(self.id)
         return self.model_copy(update={"answers": (*self.answers, answer)})

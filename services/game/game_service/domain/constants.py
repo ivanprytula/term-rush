@@ -43,12 +43,25 @@ RECENT_WINDOW_DAYS = 7  # How long a term stays "recent" after first introductio
 
 # Round bounds
 ROUND_ID_MAX_LEN = 64
-ROUND_MAX_ANSWERS = 200  # generous ceiling; no game mode runs this long yet
+ROUND_MAX_ANSWERS = 200  # generous ceiling; tightest real cap is DAILY_20_ROUND_SIZE=20
 
 # Sprint mode
 DEFAULT_SPRINT_DURATION_SECONDS = 60
 MIN_SPRINT_DURATION_SECONDS = 10
 MAX_SPRINT_DURATION_SECONDS = 300
+
+# Survival mode
+SURVIVAL_LIVES = 3  # one lost per INCORRECT verdict; PARTIAL/CORRECT are free
+
+# Boss Round
+BOSS_ROUND_SIZE = 1  # a Boss round is exactly one term, one answer
+
+# Daily 20
+DAILY_20_ROUND_SIZE = 20  # first server-enforced term count; Classic's
+# ROUND_LENGTH=10 is still client-only
+DAILY_20_SEED_EPOCH = "term-rush-daily"  # namespace prefix for the date seed,
+# so the same date in another feature
+# can't produce the same ordering
 
 # Leaderboard bounds
 LEADERBOARD_MIN_LIMIT = 1

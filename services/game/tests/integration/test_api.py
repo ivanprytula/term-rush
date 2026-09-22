@@ -288,6 +288,32 @@ def test_create_round_classic_has_no_remaining_seconds(
     assert body["remaining_seconds"] is None
 
 
+def test_create_round_classic_defaults_new_mode_fields(
+    client_with_uow_term: TestClient,
+) -> None:
+    """A freshly created Classic round is never over and has no mode-specific
+    counters — is_over/lives_remaining/terms_remaining are Survival/Boss/
+    Daily 20 concerns, all null or false for Classic."""
+    response = client_with_uow_term.post("/game-rounds")
+
+    body = response.json()
+    assert body["is_over"] is False
+    assert body["lives_remaining"] is None
+    assert body["terms_remaining"] is None
+
+
+def test_create_round_accepts_every_new_mode_value(
+    client_with_uow_term: TestClient,
+) -> None:
+    """POST /game-rounds accepts survival/boss/daily_20 without validation
+    error — CreateRoundRequest's mode field already accepts every RoundMode
+    member automatically; this locks that in."""
+    for mode in ("survival", "boss", "daily_20"):
+        response = client_with_uow_term.post("/game-rounds", json={"mode": mode})
+        assert response.status_code == 201, mode
+        assert response.json()["mode"] == mode
+
+
 def test_submit_answer_rejects_expired_sprint_round(
     client_and_uow: tuple[TestClient, InMemoryUnitOfWork],
 ) -> None:

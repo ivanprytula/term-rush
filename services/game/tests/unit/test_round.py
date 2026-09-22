@@ -185,3 +185,62 @@ def test_record_succeeds_within_sprint_window(answer: SubmittedAnswer) -> None:
     updated = round_.record(answer, now + timedelta(seconds=30))
 
     assert updated.answers == (answer,)
+
+
+@pytest.mark.parametrize(
+    ("mode", "policy"),
+    [
+        (RoundMode.CLASSIC, "opt_in"),
+        (RoundMode.SPRINT, "forced_off"),
+        (RoundMode.SURVIVAL, "opt_in"),
+        (RoundMode.BOSS, "forced_on"),
+        (RoundMode.DAILY_20, "forced_off"),
+    ],
+)
+@pytest.mark.parametrize("requested", [True, False])
+def test_resolve_llm_grading_per_mode(
+    mode: RoundMode, policy: str, requested: bool
+) -> None:
+    resolved = mode.resolve_llm_grading(requested)
+
+    if policy == "forced_off":
+        assert resolved is False
+    elif policy == "forced_on":
+        assert resolved is True
+    else:
+        assert resolved is requested
+
+
+def test_is_over_false_for_classic_regardless_of_answers(
+    answer: SubmittedAnswer,
+) -> None:
+    now = datetime.now(UTC)
+    round_ = GameRound(id="s1", created_at=now, answers=(answer,) * 50)
+
+    assert round_.is_over(now) is False
+
+
+def test_is_over_true_for_expired_sprint() -> None:
+    now = datetime.now(UTC)
+    round_ = GameRound.start(now, mode=RoundMode.SPRINT, duration_seconds=60)
+
+    assert round_.is_over(now + timedelta(seconds=60)) is True
+
+
+def test_is_over_false_for_live_sprint() -> None:
+    now = datetime.now(UTC)
+    round_ = GameRound.start(now, mode=RoundMode.SPRINT, duration_seconds=60)
+
+    assert round_.is_over(now + timedelta(seconds=59)) is False
+
+
+def test_lives_remaining_none_outside_survival() -> None:
+    round_ = GameRound.start(datetime.now(UTC))
+
+    assert round_.lives_remaining is None
+
+
+def test_terms_remaining_none_outside_daily_20() -> None:
+    round_ = GameRound.start(datetime.now(UTC))
+
+    assert round_.terms_remaining is None

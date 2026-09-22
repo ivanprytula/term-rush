@@ -62,8 +62,9 @@ class SubmitAnswer:
 
         use_llm_grading: player opt-in. Only escalates when the deterministic
         chain returns PARTIAL and an llm_grader is configured; ignored
-        otherwise. Always ignored in Sprint mode — SSE latency works against
-        a timed mode's point (see docs/prd-sprint-mode.md).
+        otherwise. The round's mode can also force this on or off regardless
+        of the request — see RoundMode.resolve_llm_grading (Sprint forces
+        off, Boss forces on, Daily 20 forces off for cross-player fairness).
 
         Events (for Phase 2/3): AnswerGraded published on commit.
         """
@@ -71,8 +72,8 @@ class SubmitAnswer:
 
         async with self.uow:
             round_ = await self.uow.rounds.by_id(round_id)
-            if round_ is not None and round_.mode is RoundMode.SPRINT:
-                use_llm_grading = False
+            if round_ is not None:
+                use_llm_grading = round_.mode.resolve_llm_grading(use_llm_grading)
 
             cached = await self.uow.grade_cache.get(term_id, answer_hash)
             if cached is not None:
@@ -230,8 +231,8 @@ class SubmitAnswerStreaming:
 
         async with self.uow:
             round_ = await self.uow.rounds.by_id(round_id)
-            if round_ is not None and round_.mode is RoundMode.SPRINT:
-                use_llm_grading = False
+            if round_ is not None:
+                use_llm_grading = round_.mode.resolve_llm_grading(use_llm_grading)
 
             cached = await self.uow.grade_cache.get(term_id, answer_hash)
             if cached is not None:
@@ -333,9 +334,13 @@ class GetLeaderboard:
             return await self.uow.rounds.top_by_score(limit)
 
 
-class GetRandomTerm:
-    """Fetch a random term to present to the player, avoiding ones already
-    seen this round where the bank allows it."""
+class GetNextTerm:
+    """Fetch the term to present to the player next.
+
+    Renamed from GetRandomTerm: Daily 20 (a later slice) will walk its
+    round's snapshotted term_ids in positional order rather than drawing
+    randomly, so "random" is not an accurate name for what this use case
+    does across every mode. Today every mode still gets a random draw."""
 
     def __init__(self, uow: UnitOfWork) -> None:
         self.uow = uow

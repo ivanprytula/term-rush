@@ -54,9 +54,11 @@ CategoryQuery = Annotated[
 class CreateRoundRequest(BaseModel):
     """Start a new round.
 
-    mode: "classic" (untimed, default) or "sprint" (fixed countdown).
+    mode: "classic" (untimed, default), "sprint" (fixed countdown),
+    "survival" (3 lives), "boss" (one boss-eligible term), or "daily_20"
+    (today's shared 20-term set).
     duration_seconds: Sprint-only; defaults to
-    DEFAULT_SPRINT_DURATION_SECONDS if omitted. Ignored for Classic.
+    DEFAULT_SPRINT_DURATION_SECONDS if omitted. Ignored for every other mode.
     """
 
     mode: RoundMode = RoundMode.CLASSIC
@@ -200,10 +202,18 @@ class RoundResponse(BaseModel):
     id: str
     created_at: datetime
     answers: list[SubmittedAnswerResponse]
-    mode: str = Field(examples=["classic", "sprint"])
-    # Sprint only; null for Classic. Lets the client render a countdown
-    # without independently tracking wall-clock state.
+    mode: str = Field(examples=["classic", "sprint", "survival", "boss", "daily_20"])
+    # Sprint only; null for every other mode. Lets the client render a
+    # countdown without independently tracking wall-clock state.
     remaining_seconds: float | None = None
+    # Whether the round has reached its mode's terminal state, whatever ends
+    # it (Sprint's timer, Survival's lives, Boss's one answer, Daily 20's
+    # term cap). Always false for Classic — it never ends server-side.
+    is_over: bool = False
+    # Survival only; null for every other mode.
+    lives_remaining: int | None = None
+    # Daily 20 only; null for every other mode.
+    terms_remaining: int | None = None
 
     @staticmethod
     def from_round(round_: GameRound, now: datetime) -> RoundResponse:
@@ -223,6 +233,9 @@ class RoundResponse(BaseModel):
             ],
             mode=round_.mode.value,
             remaining_seconds=round_.remaining_seconds(now),
+            is_over=round_.is_over(now),
+            lives_remaining=round_.lives_remaining,
+            terms_remaining=round_.terms_remaining,
         )
 
 
