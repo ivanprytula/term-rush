@@ -24,6 +24,7 @@ from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
 from game_service.domain.round import RoundExpired
 from game_service.domain.round import RoundMode
+from game_service.domain.round import RoundOver
 from game_service.domain.term import Category
 from game_service.domain.term import Difficulty
 from game_service.domain.term import Term
@@ -322,6 +323,26 @@ async def test_submit_answer_raises_round_expired_past_sprint_deadline(
 
     with pytest.raises(RoundExpired):
         await use_case.execute(sprint_round.id, "uow", "Unit of Work")
+
+
+@pytest.mark.asyncio
+async def test_submit_answer_raises_round_over_when_survival_lives_exhausted(
+    uow: InMemoryUnitOfWork,
+) -> None:
+    """3 wrong answers in a Survival round exhausts its lives; the 4th
+    submission is rejected regardless of its own verdict. Distinct wrong
+    answer text per submission so the grade cache doesn't short-circuit the
+    grading path on repeats."""
+    survival_round = GameRound.start(datetime.now(UTC), mode=RoundMode.SURVIVAL)
+    await uow.rounds.save(survival_round)
+    use_case = SubmitAnswer(uow)
+
+    for wrong_answer in ("nonsense one", "nonsense two", "nonsense three"):
+        outcome = await use_case.execute(survival_round.id, "uow", wrong_answer)
+        assert outcome.verdict is Verdict.INCORRECT
+
+    with pytest.raises(RoundOver):
+        await use_case.execute(survival_round.id, "uow", "Unit of Work")
 
 
 @pytest.mark.asyncio

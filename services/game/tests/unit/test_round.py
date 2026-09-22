@@ -16,6 +16,7 @@ from game_service.domain.round import GameRound
 from game_service.domain.round import RoundExpired
 from game_service.domain.round import RoundFull
 from game_service.domain.round import RoundMode
+from game_service.domain.round import RoundOver
 from game_service.domain.round import SubmittedAnswer
 
 
@@ -244,3 +245,76 @@ def test_terms_remaining_none_outside_daily_20() -> None:
     round_ = GameRound.start(datetime.now(UTC))
 
     assert round_.terms_remaining is None
+
+
+def _survival_answer(verdict: Verdict) -> SubmittedAnswer:
+    return SubmittedAnswer(
+        term_id="uow",
+        verdict=verdict,
+        score=0 if verdict is Verdict.INCORRECT else 30,
+        matched_via=MatchedVia.FUZZY,
+        submitted_at=datetime.now(UTC),
+    )
+
+
+def test_survival_loses_a_life_on_incorrect() -> None:
+    round_ = GameRound.start(datetime.now(UTC), mode=RoundMode.SURVIVAL)
+
+    updated = round_.record(_survival_answer(Verdict.INCORRECT), datetime.now(UTC))
+
+    assert updated.lives_remaining == constants.SURVIVAL_LIVES - 1
+
+
+def test_survival_keeps_lives_on_partial_and_correct() -> None:
+    round_ = GameRound.start(datetime.now(UTC), mode=RoundMode.SURVIVAL)
+    now = datetime.now(UTC)
+
+    updated = round_.record(_survival_answer(Verdict.PARTIAL), now)
+    updated = updated.record(_survival_answer(Verdict.CORRECT), now)
+
+    assert updated.lives_remaining == constants.SURVIVAL_LIVES
+
+
+def test_survival_lives_floor_at_zero() -> None:
+    """More INCORRECT answers than starting lives never goes negative —
+    lives_remaining floors at 0, it doesn't count past zero to a debt."""
+    round_ = GameRound.start(datetime.now(UTC), mode=RoundMode.SURVIVAL)
+    answers = (_survival_answer(Verdict.INCORRECT),) * (constants.SURVIVAL_LIVES + 5)
+    round_ = round_.model_copy(update={"answers": answers})
+
+    assert round_.lives_remaining == 0
+
+
+def test_survival_is_over_at_zero_lives() -> None:
+    round_ = GameRound(
+        id="s1",
+        created_at=datetime.now(UTC),
+        mode=RoundMode.SURVIVAL,
+        answers=(_survival_answer(Verdict.INCORRECT),) * constants.SURVIVAL_LIVES,
+    )
+
+    assert round_.is_over(datetime.now(UTC)) is True
+
+
+def test_survival_not_over_with_one_life_left() -> None:
+    round_ = GameRound(
+        id="s1",
+        created_at=datetime.now(UTC),
+        mode=RoundMode.SURVIVAL,
+        answers=(_survival_answer(Verdict.INCORRECT),) * (constants.SURVIVAL_LIVES - 1),
+    )
+
+    assert round_.is_over(datetime.now(UTC)) is False
+
+
+def test_record_raises_round_over_when_survival_lives_exhausted() -> None:
+    now = datetime.now(UTC)
+    round_ = GameRound(
+        id="s1",
+        created_at=now,
+        mode=RoundMode.SURVIVAL,
+        answers=(_survival_answer(Verdict.INCORRECT),) * constants.SURVIVAL_LIVES,
+    )
+
+    with pytest.raises(RoundOver):
+        round_.record(_survival_answer(Verdict.CORRECT), now)

@@ -53,7 +53,7 @@ export async function mockBackend(
   await page.route("**/game-rounds", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
     const body = route.request().postDataJSON() as {
-      mode?: "classic" | "sprint";
+      mode?: "classic" | "sprint" | "survival" | "boss" | "daily_20";
       duration_seconds?: number;
     } | null;
     roundCounter += 1;
@@ -69,6 +69,9 @@ export async function mockBackend(
         answers: [],
         mode,
         remaining_seconds: isSprint ? sprintDuration(roundCounter) : null,
+        is_over: false,
+        lives_remaining: mode === "survival" ? 3 : null,
+        terms_remaining: mode === "daily_20" ? 20 : null,
       }),
     });
   });

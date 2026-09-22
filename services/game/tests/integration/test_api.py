@@ -15,9 +15,12 @@ from game_service.api import dependencies
 from game_service.api.app import app
 from game_service.api.dependencies import get_term_stats_repository
 from game_service.api.dependencies import get_unit_of_work
+from game_service.domain import constants
+from game_service.domain.outcome import MatchedVia
 from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
 from game_service.domain.round import RoundMode
+from game_service.domain.round import SubmittedAnswer
 from game_service.domain.term import Category
 from game_service.domain.term import Difficulty
 from game_service.domain.term import Term
@@ -325,6 +328,39 @@ def test_submit_answer_rejects_expired_sprint_round(
 
     response = client.post(
         f"/game-rounds/{expired.id}/answers/submit",
+        json={"term_id": "uow", "answer": "Unit of Work"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_submit_answer_rejects_exhausted_survival_round(
+    client_and_uow: tuple[TestClient, InMemoryUnitOfWork],
+) -> None:
+    """Submitting to a Survival round with 0 lives left returns 422 —
+    injected directly (no HTTP round-trip needed) since 3 real submissions
+    would exercise grading, not this rejection path."""
+    client, uow = client_and_uow
+    now = datetime.now(UTC)
+    exhausted = GameRound(
+        id="s1",
+        created_at=now,
+        mode=RoundMode.SURVIVAL,
+        answers=(
+            SubmittedAnswer(
+                term_id="uow",
+                verdict=Verdict.INCORRECT,
+                score=0,
+                matched_via=MatchedVia.FUZZY,
+                submitted_at=now,
+            ),
+        )
+        * constants.SURVIVAL_LIVES,
+    )
+    asyncio.run(uow.rounds.save(exhausted))
+
+    response = client.post(
+        f"/game-rounds/{exhausted.id}/answers/submit",
         json={"term_id": "uow", "answer": "Unit of Work"},
     )
 
