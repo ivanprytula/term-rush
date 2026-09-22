@@ -317,6 +317,31 @@ def test_create_round_accepts_every_new_mode_value(
         assert response.json()["mode"] == mode
 
 
+def test_boss_round_ends_after_one_submission(
+    client_with_uow_term: TestClient,
+) -> None:
+    """POST /game-rounds {mode: boss} then one submit is_over's the round,
+    regardless of the answer's verdict."""
+    create_response = client_with_uow_term.post("/game-rounds", json={"mode": "boss"})
+    assert create_response.status_code == 201
+    round_id = create_response.json()["id"]
+
+    submit_response = client_with_uow_term.post(
+        f"/game-rounds/{round_id}/answers/submit",
+        json={"term_id": "uow", "answer": "a wrong answer"},
+    )
+    assert submit_response.status_code == 200
+
+    round_response = client_with_uow_term.get(f"/game-rounds/{round_id}")
+    assert round_response.json()["is_over"] is True
+
+    second_submit = client_with_uow_term.post(
+        f"/game-rounds/{round_id}/answers/submit",
+        json={"term_id": "uow", "answer": "a second answer"},
+    )
+    assert second_submit.status_code == 422
+
+
 def test_submit_answer_rejects_expired_sprint_round(
     client_and_uow: tuple[TestClient, InMemoryUnitOfWork],
 ) -> None:

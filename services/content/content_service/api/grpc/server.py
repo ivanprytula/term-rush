@@ -73,8 +73,22 @@ class TermServiceServicer(term_pb2_grpc.TermServiceServicer):
         async with asynccontextmanager(self._get_unit_of_work)() as uow:
             use_case = GetRandomTerm(uow)
             category = request.category if request.HasField("category") else None
+            min_difficulty = (
+                request.min_difficulty if request.HasField("min_difficulty") else None
+            )
+            min_definition_length = (
+                request.min_definition_length
+                if request.HasField("min_definition_length")
+                else None
+            )
             try:
-                term = await use_case.execute(frozenset(request.excluded_ids), category)
+                term = await use_case.execute(
+                    frozenset(request.excluded_ids),
+                    category,
+                    min_difficulty,
+                    request.require_examples,
+                    min_definition_length,
+                )
             except ValueError:
                 return term_pb2.TermReply(found=False)
             return _to_reply(term)

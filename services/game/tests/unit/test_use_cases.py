@@ -239,6 +239,83 @@ async def test_list_term_categories_returns_every_distinct_slug(
     assert await ListTermCategories(uow).execute() == ("architecture",)
 
 
+@pytest.mark.asyncio
+async def test_get_next_term_scopes_to_boss_eligible_for_a_boss_round() -> None:
+    """A Boss round's own mode derives the filter — no caller-supplied
+    parameter needed. An eligible term must be drawn over an ineligible
+    one sharing the same bank."""
+    eligible = Term(
+        id="uow",
+        term="UoW",
+        expansion="Unit of Work",
+        definitions=(
+            "Pattern that groups related changes into one transactional unit.",
+        ),
+        categories=(Category(slug="architecture"),),
+        difficulty=Difficulty.HARD,
+        examples=("Committing several repository writes as one transaction.",),
+    )
+    ineligible = Term(
+        id="trivial-term",
+        term="trivial",
+        expansion="a trivial term",
+        definitions=("Too short.",),
+        categories=(Category(slug="architecture"),),
+        difficulty=Difficulty.TRIVIAL,
+    )
+    uow = InMemoryUnitOfWork(terms={"uow": eligible, "trivial-term": ineligible})
+    boss_round = GameRound.start(datetime.now(UTC), mode=RoundMode.BOSS)
+    await uow.rounds.save(boss_round)
+
+    term = await GetNextTerm(uow).execute(round_id=boss_round.id)
+
+    assert term.id == "uow"
+
+
+@pytest.mark.asyncio
+async def test_get_next_term_raises_when_no_boss_eligible_term_exists() -> None:
+    """An empty-of-eligible-terms bank gets a Boss-specific message, not
+    the generic 'No terms available'."""
+    only_ineligible = InMemoryUnitOfWork(
+        terms={
+            "trivial-term": Term(
+                id="trivial-term",
+                term="trivial",
+                expansion="a trivial term",
+                definitions=("Too short.",),
+                categories=(Category(slug="architecture"),),
+                difficulty=Difficulty.TRIVIAL,
+            )
+        }
+    )
+    boss_round = GameRound.start(datetime.now(UTC), mode=RoundMode.BOSS)
+    await only_ineligible.rounds.save(boss_round)
+
+    with pytest.raises(ValueError, match="No boss-eligible term available"):
+        await GetNextTerm(only_ineligible).execute(round_id=boss_round.id)
+
+
+@pytest.mark.asyncio
+async def test_get_next_term_ignores_boss_filter_for_classic_round() -> None:
+    """A Classic round's own random draw is never scoped to boss-eligible —
+    the filter only applies when the round's mode is BOSS."""
+    ineligible = Term(
+        id="trivial-term",
+        term="trivial",
+        expansion="a trivial term",
+        definitions=("Too short.",),
+        categories=(Category(slug="architecture"),),
+        difficulty=Difficulty.TRIVIAL,
+    )
+    only_ineligible = InMemoryUnitOfWork(terms={"trivial-term": ineligible})
+    classic_round = GameRound.start(datetime.now(UTC), mode=RoundMode.CLASSIC)
+    await only_ineligible.rounds.save(classic_round)
+
+    term = await GetNextTerm(only_ineligible).execute(round_id=classic_round.id)
+
+    assert term.id == "trivial-term"
+
+
 class FakeJudgePort:
     def __init__(
         self,
@@ -343,6 +420,63 @@ async def test_submit_answer_raises_round_over_when_survival_lives_exhausted(
 
     with pytest.raises(RoundOver):
         await use_case.execute(survival_round.id, "uow", "Unit of Work")
+
+
+@pytest.mark.asyncio
+async def test_boss_round_forces_llm_grading_on(uow: InMemoryUnitOfWork) -> None:
+    """A Boss round escalates to the LLM judge even with use_llm_grading
+    unset — the mode's forced-on policy, not the player's opt-in, decides."""
+    judgment = LLMJudgment(
+        concept=40, expansion=30, purpose=20, example=10, rationale="Full marks."
+    )
+    llm_grader = LLMRubricGrader(FakeJudgePort(judgment=judgment))
+    boss_round = GameRound.start(datetime.now(UTC), mode=RoundMode.BOSS)
+    await uow.rounds.save(boss_round)
+    use_case = SubmitAnswer(uow, llm_grader=llm_grader)
+
+    outcome = await use_case.execute(
+        boss_round.id, "uow", "work of the unit thing", use_llm_grading=False
+    )
+
+    # The fuzzy grader alone would land PARTIAL; the LLM's full-marks
+    # judgment landing instead proves escalation happened despite the
+    # unset opt-in.
+    assert outcome.verdict is Verdict.CORRECT
+    assert outcome.matched_via is MatchedVia.LLM_RUBRIC
+
+
+@pytest.mark.asyncio
+async def test_boss_round_falls_back_to_deterministic_without_a_grader(
+    uow: InMemoryUnitOfWork,
+) -> None:
+    """No code path exists to force escalation without a configured
+    grader — SubmitAnswer only ever escalates when llm_grader is not None,
+    so an unconfigured Boss round degrades to the deterministic outcome,
+    same as every other mode."""
+    boss_round = GameRound.start(datetime.now(UTC), mode=RoundMode.BOSS)
+    await uow.rounds.save(boss_round)
+    use_case = SubmitAnswer(uow)  # no llm_grader
+
+    outcome = await use_case.execute(boss_round.id, "uow", "work of the unit thing")
+
+    assert outcome.matched_via is MatchedVia.FUZZY
+    assert outcome.verdict is Verdict.PARTIAL
+
+
+@pytest.mark.asyncio
+async def test_submit_answer_raises_round_over_after_boss_round_answered(
+    uow: InMemoryUnitOfWork,
+) -> None:
+    """A Boss round accepts exactly one answer, any verdict; the second
+    submission is rejected."""
+    boss_round = GameRound.start(datetime.now(UTC), mode=RoundMode.BOSS)
+    await uow.rounds.save(boss_round)
+    use_case = SubmitAnswer(uow)
+
+    await use_case.execute(boss_round.id, "uow", "Unit of Work")
+
+    with pytest.raises(RoundOver):
+        await use_case.execute(boss_round.id, "uow", "a second answer")
 
 
 @pytest.mark.asyncio

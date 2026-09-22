@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from content_service.domain.term import Category
+from content_service.domain.term import Difficulty
 from content_service.domain.term import Term
 from content_service.infrastructure.memory import InMemoryTermRepository
 
@@ -102,3 +103,54 @@ async def test_categories_empty_when_bank_is_empty() -> None:
     repo = InMemoryTermRepository()
 
     assert await repo.categories() == ()
+
+
+@pytest.mark.asyncio
+async def test_random_scopes_to_min_difficulty(term: Term) -> None:
+    repo = InMemoryTermRepository()
+    easy = term.model_copy(update={"id": "easy", "difficulty": Difficulty.EASY})
+    hard = term.model_copy(update={"id": "hard", "difficulty": Difficulty.HARD})
+    await repo.upsert(easy)
+    await repo.upsert(hard)
+
+    result = await repo.random(min_difficulty=int(Difficulty.MODERATE))
+
+    assert result == hard
+
+
+@pytest.mark.asyncio
+async def test_random_scopes_to_require_examples(term: Term) -> None:
+    repo = InMemoryTermRepository()
+    no_examples = term.model_copy(update={"id": "no-examples", "examples": ()})
+    with_examples = term.model_copy(
+        update={"id": "with-examples", "examples": ("An example.",)}
+    )
+    await repo.upsert(no_examples)
+    await repo.upsert(with_examples)
+
+    result = await repo.random(require_examples=True)
+
+    assert result == with_examples
+
+
+@pytest.mark.asyncio
+async def test_random_scopes_to_min_definition_length(term: Term) -> None:
+    repo = InMemoryTermRepository()
+    short = term.model_copy(update={"id": "short", "definitions": ("Too short.",)})
+    long_enough = term.model_copy(update={"id": "long", "definitions": ("x" * 40,)})
+    await repo.upsert(short)
+    await repo.upsert(long_enough)
+
+    result = await repo.random(min_definition_length=40)
+
+    assert result == long_enough
+
+
+@pytest.mark.asyncio
+async def test_random_returns_none_when_no_term_matches_the_filters(
+    term: Term,
+) -> None:
+    repo = InMemoryTermRepository()
+    await repo.upsert(term)  # MODERATE difficulty (default), no examples
+
+    assert await repo.random(require_examples=True) is None

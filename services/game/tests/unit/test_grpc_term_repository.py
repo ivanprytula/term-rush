@@ -6,6 +6,8 @@ import grpc
 import pytest
 from term_proto import term_pb2
 
+from game_service.domain.term import Difficulty
+from game_service.domain.term import TermFilter
 from game_service.infrastructure.grpc_term_repository import GrpcTermRepository
 
 
@@ -179,6 +181,36 @@ async def test_random_without_category_leaves_the_field_unset() -> None:
 
     assert stub.last_get_random_request is not None
     assert not stub.last_get_random_request.HasField("category")
+
+
+@pytest.mark.asyncio
+async def test_random_forwards_term_filter_to_the_request() -> None:
+    repo, stub = _repository()
+    stub.get_random_reply = _reply()
+
+    await repo.random(term_filter=TermFilter.boss_eligible())
+
+    assert stub.last_get_random_request is not None
+    request = stub.last_get_random_request
+    assert request.HasField("min_difficulty")
+    assert request.min_difficulty == int(Difficulty.MODERATE)
+    assert request.HasField("require_examples")
+    assert request.require_examples is True
+    assert request.HasField("min_definition_length")
+
+
+@pytest.mark.asyncio
+async def test_random_without_term_filter_leaves_the_fields_unset() -> None:
+    repo, stub = _repository()
+    stub.get_random_reply = _reply()
+
+    await repo.random()
+
+    assert stub.last_get_random_request is not None
+    request = stub.last_get_random_request
+    assert not request.HasField("min_difficulty")
+    assert not request.HasField("require_examples")
+    assert not request.HasField("min_definition_length")
 
 
 @pytest.mark.asyncio

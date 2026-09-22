@@ -15,6 +15,11 @@ message GetRandomRequest {
   repeated string excluded_ids = 1;
   // Empty means no filter (whole bank), matching today's behavior.
   optional string category = 2;
+  // Content-level constraints, not a game-mode concept — content-service
+  // filters on these properties without knowing what a Boss Round is.
+  optional int32 min_difficulty = 3;
+  optional bool require_examples = 4;
+  optional int32 min_definition_length = 5;
 }
 
 message ListCategoriesRequest {}

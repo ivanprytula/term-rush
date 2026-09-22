@@ -112,8 +112,44 @@ export async function mockBackend(
         confidence: verdict === "correct" ? 1.0 : 0.5,
         score,
         feedback: "mock feedback",
-        rubric: { concept: 0, expansion: score, purpose: 0, example: 0, total: score },
+        rubric: {
+          concept: 0,
+          expansion: score,
+          purpose: 0,
+          example: 0,
+          total: score,
+        },
       }),
+    });
+  });
+
+  // Boss mode's client always takes the streaming path (see App.tsx's
+  // effectiveLlmGrading). No rationale_delta frames — a single "graded"
+  // event is a real, valid server response whenever the deterministic
+  // verdict never reaches PARTIAL (nothing to stream), which is what this
+  // mock's gradeRule always produces (CORRECT or a caller-forced verdict).
+  await page.route("**/answers/submit/stream", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const body = route.request().postDataJSON() as { answer: string };
+    const { verdict, score } = gradeRule(body.answer);
+    const graded = {
+      verdict,
+      matched_via: verdict === "correct" ? "exact" : "fuzzy",
+      confidence: verdict === "correct" ? 1.0 : 0.5,
+      score,
+      feedback: "mock feedback",
+      rubric: {
+        concept: 0,
+        expansion: score,
+        purpose: 0,
+        example: 0,
+        total: score,
+      },
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: `event: graded\ndata: ${JSON.stringify(graded)}\n\n`,
     });
   });
 

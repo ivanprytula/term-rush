@@ -23,6 +23,7 @@ from game_service.domain.round import GameRound
 from game_service.domain.round import RoundMode
 from game_service.domain.round import SubmittedAnswer
 from game_service.domain.term import Term
+from game_service.domain.term import TermFilter
 
 logger = logging.getLogger(__name__)
 
@@ -350,22 +351,31 @@ class GetNextTerm:
         round_id: str | None = None,
         category: str | None = None,
     ) -> Term:
-        """Return a random term, optionally scoped to a category (a
+        """Return the next term, optionally scoped to a category (a
         player-chosen collection: "python-keywords", "abbreviations", ...).
-        Raises ValueError if no term matches (empty bank, or category has
-        no terms).
+        Raises ValueError if no term matches (empty bank, category has no
+        terms, or — Boss Round — no boss-eligible term exists).
 
         round_id is optional: unauthenticated callers (or callers before
-        a round exists) still get a plain random term, unexcluded.
+        a round exists) still get a plain random term, unexcluded. A Boss
+        round derives its filter from the round's own mode rather than a
+        caller-supplied parameter — a client should never be able to ask
+        for a boss-eligible term in a Classic round, and this way GET
+        /terms/random needs no new query param for it.
         """
         async with self.uow:
             excluded_ids: frozenset[str] = frozenset()
+            term_filter: TermFilter | None = None
             if round_id is not None:
                 round_ = await self.uow.rounds.by_id(round_id)
                 if round_ is not None:
                     excluded_ids = frozenset(a.term_id for a in round_.answers)
-            term = await self.uow.terms.random(excluded_ids, category)
+                    if round_.mode is RoundMode.BOSS:
+                        term_filter = TermFilter.boss_eligible()
+            term = await self.uow.terms.random(excluded_ids, category, term_filter)
             if term is None:
+                if term_filter is not None:
+                    raise ValueError("No boss-eligible term available")
                 raise ValueError("No terms available")
             return term
 

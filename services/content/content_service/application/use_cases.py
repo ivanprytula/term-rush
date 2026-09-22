@@ -34,11 +34,20 @@ class GetRandomTerm:
         self,
         excluded_ids: frozenset[str] = frozenset(),
         category: str | None = None,
+        min_difficulty: int | None = None,
+        require_examples: bool = False,
+        min_definition_length: int | None = None,
     ) -> Term:
-        """Return a random term, optionally scoped to a category. Raises
-        ValueError if no term matches (empty bank, or category has no terms)."""
+        """Return a random term, optionally scoped to a category and/or
+        content-property constraints. Raises ValueError if no term matches."""
         async with self.uow:
-            term = await self.uow.terms.random(excluded_ids, category)
+            term = await self.uow.terms.random(
+                excluded_ids,
+                category,
+                min_difficulty,
+                require_examples,
+                min_definition_length,
+            )
             if term is None:
                 raise ValueError("No terms available")
             return term

@@ -24,17 +24,25 @@ class TermRepository(ABC):
         self,
         excluded_ids: frozenset[str] = frozenset(),
         category: str | None = None,
+        min_difficulty: int | None = None,
+        require_examples: bool = False,
+        min_definition_length: int | None = None,
     ) -> Term | None:
         """Fetch a random term, avoiding excluded_ids where possible.
 
         category, if given, scopes the pick to terms tagged with that
         category slug. None means the whole bank, as before.
 
-        Falls back to the full matching set (excluded_ids ignored, category
-        still applied) once every matching term is excluded, rather than
-        returning None — a round that has shown every term in its chosen
-        category should repeat, not error. None only if no term matches
-        category at all (or the bank itself is empty, when category is None).
+        min_difficulty/require_examples/min_definition_length are plain
+        content-property constraints — deliberately not a "Boss Round"
+        concept. The caller (game-service, over gRPC) decides what a mode
+        needs; content-service just filters on properties it already owns.
+
+        Falls back to the full matching set (excluded_ids ignored, every
+        other filter still applied) once every matching term is excluded,
+        rather than returning None — a round that has shown every term in
+        its chosen scope should repeat, not error. None only if no term
+        matches at all (or the bank itself is empty, when unfiltered).
         """
 
     @abstractmethod
