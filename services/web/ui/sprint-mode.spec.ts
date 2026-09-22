@@ -2,11 +2,11 @@ import { test, expect } from "@playwright/test";
 import { mockBackend } from "./mocks";
 
 test.describe("Sprint mode", () => {
-  test("checkbox selects sprint mode before starting", async ({ page }) => {
+  test("mode picker selects sprint before starting", async ({ page }) => {
     await mockBackend(page);
     await page.goto("/");
 
-    await page.getByRole("checkbox", { name: /sprint mode/i }).check();
+    await page.getByRole("combobox", { name: "mode" }).selectOption("sprint");
     await page.getByRole("button", { name: "start round" }).click();
 
     // Countdown visible, term counter is not (mode is mutually exclusive).
@@ -19,7 +19,7 @@ test.describe("Sprint mode", () => {
   }) => {
     await mockBackend(page, { sprintDurationSeconds: 60 });
     await page.goto("/");
-    await page.getByRole("checkbox", { name: /sprint mode/i }).check();
+    await page.getByRole("combobox", { name: "mode" }).selectOption("sprint");
     await page.getByRole("button", { name: "start round" }).click();
 
     const clockText = page.getByText(/⏱/);
@@ -44,7 +44,7 @@ test.describe("Sprint mode", () => {
   }) => {
     await mockBackend(page, { sprintDurationSeconds: 2 });
     await page.goto("/");
-    await page.getByRole("checkbox", { name: /sprint mode/i }).check();
+    await page.getByRole("combobox", { name: "mode" }).selectOption("sprint");
     await page.getByRole("button", { name: "start round" }).click();
 
     await page.getByPlaceholder("type your answer…").fill("an answer");
@@ -53,20 +53,22 @@ test.describe("Sprint mode", () => {
 
     // Timer keeps running under the result panel; "see results" replaces
     // "next term" once it hits zero, even mid-result.
-    await expect(
-      page.getByRole("button", { name: "see results" }),
-    ).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("button", { name: "see results" })).toBeVisible(
+      { timeout: 5000 },
+    );
     await page.getByRole("button", { name: "see results" }).click();
 
     await expect(page.getByText("# time's up")).toBeVisible();
     await expect(page.getByText("30", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "play again" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "play again" }),
+    ).toBeVisible();
   });
 
   test("submit is blocked once the round has expired", async ({ page }) => {
     await mockBackend(page, { sprintDurationSeconds: 2 });
     await page.goto("/");
-    await page.getByRole("checkbox", { name: /sprint mode/i }).check();
+    await page.getByRole("combobox", { name: "mode" }).selectOption("sprint");
     await page.getByRole("button", { name: "start round" }).click();
 
     // Let the timer run out while the question is still on screen — no
@@ -89,7 +91,7 @@ test.describe("Sprint mode", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("checkbox", { name: /sprint mode/i }).check();
+    await page.getByRole("combobox", { name: "mode" }).selectOption("sprint");
     await page.getByRole("button", { name: "start round" }).click();
 
     await expect(page.getByText("# time's up")).toBeVisible({

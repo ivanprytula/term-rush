@@ -5,12 +5,33 @@ import {
   getTermCategoriesTermsCategoriesGet,
   submitAnswerGameRoundsRoundIdAnswersSubmitPost,
 } from "./client";
-import type { SubmitAnswerResponse, TermPromptResponse } from "./client";
+import type {
+  RoundMode,
+  SubmitAnswerResponse,
+  TermPromptResponse,
+} from "./client";
 import { submitAnswerStream } from "./submitAnswerStream";
 import { useSprintCountdown } from "./useSprintCountdown";
 
 const THEME_KEY = "term-rush-theme";
 const ROUND_LENGTH = 10;
+const SURVIVAL_LIVES = 3; // mirrors constants.SURVIVAL_LIVES server-side
+
+// Boss and Daily 20 aren't in this list yet — their term-selection logic
+// (a boss-eligible filter, the shared seeded 20-term set) lands in later
+// slices; until then GetNextTerm always draws a plain random term, so
+// exposing them here would let a player "play" a mode that silently isn't
+// what its name promises. Add each mode to this list only once its own
+// slice actually implements it.
+const MODES: readonly RoundMode[] = ["classic", "sprint", "survival"];
+
+const MODE_LABEL: Record<RoundMode, string> = {
+  classic: "classic",
+  sprint: "sprint — 60s countdown",
+  survival: "survival — 3 lives",
+  boss: "boss — one hard term, AI-graded",
+  daily_20: "daily 20 — today's shared set",
+};
 
 const THEMES = [
   "phosphor",
@@ -86,6 +107,31 @@ function CategoryPicker({
         {categories.map((c) => (
           <option key={c} value={c}>
             {c}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function ModePicker({
+  selected,
+  onChange,
+}: {
+  selected: RoundMode;
+  onChange: (mode: RoundMode) => void;
+}) {
+  return (
+    <label className="flex items-center justify-center gap-2 text-sm text-text-dim">
+      mode
+      <select
+        value={selected}
+        onChange={(e) => onChange(e.target.value as RoundMode)}
+        className="bg-surface border border-surface-border text-text px-2 py-1 focus:outline-none focus:border-phosphor"
+      >
+        {MODES.map((m) => (
+          <option key={m} value={m}>
+            {MODE_LABEL[m]}
           </option>
         ))}
       </select>
@@ -191,8 +237,9 @@ function RoundSummary({
   onPlayAgain,
 }: {
   answers: SubmitAnswerResponse[];
-  // "time's up" reuses this panel for a Sprint round's expiry screen —
-  // same content (score + verdict breakdown), different trigger.
+  // Every mode's terminal state reuses this same panel — same content
+  // (score + verdict breakdown), just a different heading per mode (see
+  // ROUND_END_HEADING) for why the round ended.
   heading?: string;
   onPlayAgain: () => void;
 }) {
@@ -292,12 +339,24 @@ export default function App() {
   // live checkbox state, which the player could change before the result
   // renders. Answers "did we ask for AI feedback on this result?".
   const [requestedLlmGrading, setRequestedLlmGrading] = useState(false);
-  // Checked before starting a round; changing it has no effect on a round
-  // already in progress — mode is fixed server-side at creation.
-  const [sprintMode, setSprintMode] = useState(false);
+  // Picker's live value for the *next* round to start; changing it has no
+  // effect on a round already in progress — mode is fixed server-side at
+  // creation.
+  const [selectedMode, setSelectedMode] = useState<RoundMode>("classic");
   // The round's own mode, as returned by the server — distinct from
-  // sprintMode (the toggle for the *next* round to start).
-  const [roundMode, setRoundMode] = useState<"classic" | "sprint">("classic");
+  // selectedMode (the picker for the *next* round to start).
+  const [roundMode, setRoundMode] = useState<RoundMode>("classic");
+  // Survival only, derived client-side from answers (SURVIVAL_LIVES minus
+  // incorrect verdicts so far) — the server stays authoritative regardless
+  // (still 422s past zero lives), same trust split Sprint's countdown uses.
+  const livesRemaining =
+    roundMode === "survival"
+      ? Math.max(
+          0,
+          SURVIVAL_LIVES -
+            answers.filter((a) => a.verdict === "incorrect").length,
+        )
+      : null;
   // Every collection the player can choose to play from — fetched once on
   // mount, not tied to any round.
   const [categories, setCategories] = useState<string[]>([]);
@@ -314,9 +373,31 @@ export default function App() {
   const [serverRemaining, setServerRemaining] = useState<number | null>(null);
   const remainingSeconds = useSprintCountdown(serverRemaining);
   const sprintExpired = roundMode === "sprint" && remainingSeconds === 0;
+  // Daily 20's term cap isn't enforced client-side yet (its own slice reads
+  // this from the server's terms_remaining field instead of a hardcoded
+  // constant) — always false until then, so ROUND_END's daily_20 entry is
+  // unreachable today but type-checks against the full RoundMode union.
+  const dailyRoundComplete = false;
 
-  const roundComplete =
-    roundMode === "classic" ? answers.length >= ROUND_LENGTH : sprintExpired;
+  // Exhaustive over RoundMode: a 6th mode added later is a type error here,
+  // not a silently-wrong fallback branch.
+  const ROUND_END: Record<RoundMode, boolean> = {
+    classic: answers.length >= ROUND_LENGTH,
+    sprint: sprintExpired,
+    survival: livesRemaining === 0,
+    boss: answers.length >= 1,
+    daily_20: dailyRoundComplete,
+  };
+  const roundComplete = ROUND_END[roundMode];
+
+  const ROUND_END_HEADING: Record<RoundMode, string> = {
+    classic: "round complete",
+    sprint: "time's up",
+    survival: "out of lives",
+    boss: "boss round complete",
+    daily_20: "daily 20 complete",
+  };
+
   const started = roundId !== null;
 
   // category defaults to roundCategory (the round's locked-in choice) so
@@ -343,20 +424,22 @@ export default function App() {
   // Starts a round server-side and loads its first term. Used both on
   // mount and on "play again" — each is a genuinely new round, not a
   // continuation, so both mint a fresh id rather than reusing one. Mode is
-  // fixed by the sprintMode toggle at the moment the round starts; category
-  // likewise locks in selectedCategory as roundCategory.
+  // fixed by the selectedMode picker at the moment the round starts;
+  // category likewise locks in selectedCategory as roundCategory.
   const startRound = async () => {
     setError(null);
     setRoundCategory(selectedCategory);
     const { data } = await createRoundGameRoundsPost({
-      body: { mode: sprintMode ? "sprint" : "classic" },
+      body: { mode: selectedMode },
     });
     if (!data) {
       setError({ message: "Could not start a round.", retryAction: "load" });
       return;
     }
     setRoundId(data.id);
-    setRoundMode(data.mode === "sprint" ? "sprint" : "classic");
+    // Trust the server's mode directly — RoundResponse.mode is typed as a
+    // RoundMode, not a plain string, so this is no longer a lossy narrowing.
+    setRoundMode(data.mode as RoundMode);
     setServerRemaining(data.remaining_seconds ?? null);
     // Explicit selectedCategory, not loadTerm's roundCategory default:
     // setRoundCategory above hasn't committed yet in this same tick.
@@ -399,9 +482,10 @@ export default function App() {
   const submitAnswer = async () => {
     // roundId is set by the time a term is on screen — startRound() always
     // loads a term after minting the round, never in either order.
-    // sprintExpired: don't fire a submit the server would 422 anyway — the
-    // countdown reaching 0 already flips to the time's-up screen below.
-    if (!term || !answer.trim() || !roundId || sprintExpired) return;
+    // roundComplete: don't fire a submit the server would 422 anyway — the
+    // round's own terminal state (Sprint's timer, Survival's lives, ...)
+    // already flips to its end screen below.
+    if (!term || !answer.trim() || !roundId || roundComplete) return;
     setLoading(true);
     setError(null);
     setRequestedLlmGrading(useLlmGrading);
@@ -456,21 +540,13 @@ export default function App() {
 
         <HowToPlay />
 
-        {/* Mode is fixed server-side at round creation — the toggle only
+        {/* Mode is fixed server-side at round creation — the picker only
             affects the round about to start, so it's shown before start
             and again once a round ends (via RoundSummary's "play again"),
             never mid-round. */}
         {!started && (
           <div className="bg-surface border border-surface-border p-6 space-y-4 text-center">
-            <label className="flex items-center justify-center gap-2 text-sm text-text-dim">
-              <input
-                type="checkbox"
-                checked={sprintMode}
-                onChange={(e) => setSprintMode(e.target.checked)}
-                className="accent-phosphor bg-surface border-surface-border"
-              />
-              sprint mode (60s countdown)
-            </label>
+            <ModePicker selected={selectedMode} onChange={setSelectedMode} />
             <CategoryPicker
               categories={categories}
               selected={selectedCategory}
@@ -502,6 +578,19 @@ export default function App() {
           >
             {"⏱ "}
             {Math.ceil(remainingSeconds ?? 0)}s
+          </p>
+        )}
+        {started && !roundComplete && roundMode === "survival" && (
+          <p className="text-sm text-text-dim text-center">
+            <span aria-hidden="true">
+              {"♥".repeat(livesRemaining ?? 0)}
+              {"♡".repeat(SURVIVAL_LIVES - (livesRemaining ?? 0))}
+            </span>
+            {/* aria-live: unlike the countdown, this changes once per
+                answer, not per frame — worth announcing, not spam. */}
+            <span className="sr-only" aria-live="polite">
+              {livesRemaining ?? 0} lives remaining
+            </span>
           </p>
         )}
 
@@ -596,7 +685,7 @@ export default function App() {
         {roundComplete && !result && (
           <RoundSummary
             answers={answers}
-            heading={sprintExpired ? "time's up" : "round complete"}
+            heading={ROUND_END_HEADING[roundMode]}
             onPlayAgain={startNewRound}
           />
         )}

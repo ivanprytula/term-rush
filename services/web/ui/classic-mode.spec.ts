@@ -2,13 +2,13 @@ import { test, expect } from "@playwright/test";
 import { mockBackend } from "./mocks";
 
 test.describe("Classic mode", () => {
-  test("starts unchecked, shows the pre-game screen", async ({ page }) => {
+  test("defaults to classic, shows the pre-game screen", async ({ page }) => {
     await mockBackend(page);
     await page.goto("/");
 
-    await expect(
-      page.getByRole("checkbox", { name: /sprint mode/i }),
-    ).not.toBeChecked();
+    await expect(page.getByRole("combobox", { name: "mode" })).toHaveValue(
+      "classic",
+    );
     await expect(
       page.getByRole("button", { name: "start round" }),
     ).toBeVisible();
@@ -30,13 +30,13 @@ test.describe("Classic mode", () => {
 
       await expect(page.getByText(/\[ CORRECT \]/)).toBeVisible();
       const continueLabel = i < 9 ? "next term" : "see results";
-      await page
-        .getByRole("button", { name: continueLabel })
-        .click();
+      await page.getByRole("button", { name: continueLabel }).click();
     }
 
     await expect(page.getByText("# round complete")).toBeVisible();
-    await expect(page.getByRole("button", { name: "play again" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "play again" }),
+    ).toBeVisible();
   });
 
   test("shows the term counter, not a countdown", async ({ page }) => {
