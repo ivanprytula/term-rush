@@ -18,6 +18,7 @@ from testcontainers.community.postgres import PostgresContainer
 from game_service.domain.outcome import MatchedVia
 from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
+from game_service.domain.round import RoundMode
 from game_service.domain.round import SubmittedAnswer
 from game_service.infrastructure.database import Base
 from game_service.infrastructure.sql_repositories import SQLRoundRepository
@@ -48,10 +49,11 @@ async def session(postgres_url: str) -> AsyncGenerator[AsyncSession]:
     await engine.dispose()
 
 
-def _round(round_id: str, score: int) -> GameRound:
+def _round(round_id: str, score: int, mode: RoundMode = RoundMode.CLASSIC) -> GameRound:
     return GameRound(
         id=round_id,
         created_at=datetime.now(UTC),
+        mode=mode,
         answers=(
             SubmittedAnswer(
                 term_id="uow",
@@ -123,3 +125,39 @@ async def test_save_upsert_updates_total_score(session: AsyncSession) -> None:
 
     assert round_ is not None
     assert round_.total_score == 30
+
+
+@pytest.mark.asyncio
+async def test_save_persists_mode(session: AsyncSession) -> None:
+    repo = SQLRoundRepository(session)
+    await repo.save(_round("r1", score=10, mode=RoundMode.SURVIVAL))
+    await session.commit()
+
+    round_ = await repo.by_id("r1")
+
+    assert round_ is not None
+    assert round_.mode is RoundMode.SURVIVAL
+
+
+@pytest.mark.asyncio
+async def test_top_by_score_filters_by_mode(session: AsyncSession) -> None:
+    repo = SQLRoundRepository(session)
+    await repo.save(_round("classic-hi", score=90, mode=RoundMode.CLASSIC))
+    await repo.save(_round("survival-lo", score=10, mode=RoundMode.SURVIVAL))
+    await session.commit()
+
+    top = await repo.top_by_score(limit=10, mode=RoundMode.SURVIVAL)
+
+    assert [r.id for r in top] == ["survival-lo"]
+
+
+@pytest.mark.asyncio
+async def test_top_by_score_without_mode_returns_all(session: AsyncSession) -> None:
+    repo = SQLRoundRepository(session)
+    await repo.save(_round("classic-hi", score=90, mode=RoundMode.CLASSIC))
+    await repo.save(_round("survival-lo", score=10, mode=RoundMode.SURVIVAL))
+    await session.commit()
+
+    top = await repo.top_by_score(limit=10)
+
+    assert [r.id for r in top] == ["classic-hi", "survival-lo"]

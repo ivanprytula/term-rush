@@ -45,6 +45,9 @@ class GameRoundModel(Base):
     total_score: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, index=True
     )
+    # Denormalized from data (GameRound.mode) so the leaderboard can filter
+    # in SQL instead of deserializing every row's JSON in Python.
+    mode: Mapped[str] = mapped_column(String(16), nullable=False, default="classic")
 
 
 class TermStatsModel(Base):

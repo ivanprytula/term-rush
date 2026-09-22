@@ -12,6 +12,7 @@ from abc import abstractmethod
 from game_service.domain.outcome import GradeOutcome
 from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
+from game_service.domain.round import RoundMode
 from game_service.domain.term import Term
 from game_service.domain.term import TermFilter
 from game_service.domain.term_stats import TermStats
@@ -70,8 +71,14 @@ class RoundRepository(ABC):
         """Create or replace a round."""
 
     @abstractmethod
-    async def top_by_score(self, limit: int) -> list[GameRound]:
-        """Fetch the top `limit` rounds ordered by total_score descending."""
+    async def top_by_score(
+        self, limit: int, mode: RoundMode | None = None
+    ) -> list[GameRound]:
+        """Fetch the top `limit` rounds ordered by total_score descending.
+
+        mode, if given, scopes the leaderboard to that mode only. None
+        mixes every mode's scores (the pre-existing, now opt-out, fairness
+        caveat)."""
 
 
 class GradeCache(ABC):

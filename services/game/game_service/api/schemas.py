@@ -245,6 +245,7 @@ class LeaderboardEntryResponse(BaseModel):
     round_id: str
     total_score: int
     created_at: datetime
+    mode: str = Field(examples=["classic", "sprint", "survival", "boss", "daily_20"])
 
     @staticmethod
     def from_round(round_: GameRound) -> LeaderboardEntryResponse:
@@ -253,6 +254,7 @@ class LeaderboardEntryResponse(BaseModel):
             round_id=round_.id,
             total_score=round_.total_score,
             created_at=round_.created_at,
+            mode=round_.mode.value,
         )
 
 
