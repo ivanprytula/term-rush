@@ -16,6 +16,7 @@ from game_service.domain.outcome import GradeOutcome
 from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
 from game_service.domain.term import Term
+from game_service.domain.term import TermFilter
 from game_service.domain.term_stats import TermStats
 
 
@@ -32,22 +33,20 @@ class InMemoryTermRepository(TermRepository):
         self,
         excluded_ids: frozenset[str] = frozenset(),
         category: str | None = None,
+        term_filter: TermFilter | None = None,
     ) -> Term | None:
         if not self.terms:
             return None
-        in_category = (
-            [
-                t
-                for t in self.terms.values()
-                if any(c.slug == category for c in t.categories)
-            ]
-            if category is not None
-            else list(self.terms.values())
-        )
-        if not in_category:
+        matching = [
+            t
+            for t in self.terms.values()
+            if (category is None or any(c.slug == category for c in t.categories))
+            and (term_filter is None or term_filter.matches(t))
+        ]
+        if not matching:
             return None
-        candidates = [t for t in in_category if t.id not in excluded_ids]
-        return random.choice(candidates or in_category)
+        candidates = [t for t in matching if t.id not in excluded_ids]
+        return random.choice(candidates or matching)
 
     async def categories(self) -> tuple[str, ...]:
         slugs = {c.slug for t in self.terms.values() for c in t.categories}

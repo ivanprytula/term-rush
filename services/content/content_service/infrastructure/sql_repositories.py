@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from sqlalchemy import Integer
 from sqlalchemy import bindparam
 from sqlalchemy import cast
 from sqlalchemy import column
@@ -40,18 +41,23 @@ class SQLTermRepository(TermRepository):
         self,
         excluded_ids: frozenset[str] = frozenset(),
         category: str | None = None,
+        min_difficulty: int | None = None,
+        require_examples: bool = False,
+        min_definition_length: int | None = None,
     ) -> Term | None:
         """Fetch a random term, avoiding excluded_ids where possible, scoped
-        to category if given.
+        to category and/or content-property constraints if given.
 
-        category filters via jsonb containment on the existing data column
-        (no schema migration) — correct at today's corpus size (~10^3
-        terms, ADR-0012); a GIN index on data::jsonb is the move if this
-        query ever shows up in EXPLAIN ANALYZE as a real bottleneck.
+        Every filter applies via jsonb operations on the existing data
+        column (no schema migration) — correct at today's corpus size
+        (~10^3 terms, ADR-0012); a GIN index on data::jsonb is the move if
+        this query ever shows up in EXPLAIN ANALYZE as a real bottleneck.
 
         Falls back to the full matching set once excluded_ids covers every
-        matching term (a round that has shown everything in its category
-        should repeat, not fail).
+        matching term (a round that has shown everything in its scope
+        should repeat, not fail) — every other filter still applies on the
+        fallback, so an exhausted Boss round never falls back to an
+        ineligible term.
         """
         stmt = select(TermModel).order_by(func.random()).limit(1)
         if category is not None:
@@ -68,12 +74,31 @@ class SQLTermRepository(TermRepository):
                     )
                 )
             )
+        if min_difficulty is not None:
+            stmt = stmt.where(
+                cast(cast(TermModel.data, JSONB)["difficulty"].astext, Integer)
+                >= min_difficulty
+            )
+        if require_examples:
+            stmt = stmt.where(
+                func.jsonb_array_length(cast(TermModel.data, JSONB)["examples"]) > 0
+            )
+        if min_definition_length is not None:
+            stmt = stmt.where(
+                func.length(cast(TermModel.data, JSONB)["definitions"][0].astext)
+                >= min_definition_length
+            )
         if excluded_ids:
             stmt = stmt.where(TermModel.id.not_in(excluded_ids))
         result = await self.session.execute(stmt)
         model = result.scalars().first()
         if not model and excluded_ids:
-            return await self.random(category=category)
+            return await self.random(
+                category=category,
+                min_difficulty=min_difficulty,
+                require_examples=require_examples,
+                min_definition_length=min_definition_length,
+            )
         if not model:
             return None
         assert isinstance(model.data, str)

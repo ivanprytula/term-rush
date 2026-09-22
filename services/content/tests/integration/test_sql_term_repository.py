@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from testcontainers.community.postgres import PostgresContainer
 
 from content_service.domain.term import Category
+from content_service.domain.term import Difficulty
 from content_service.domain.term import Term
 from content_service.infrastructure.database import Base
 from content_service.infrastructure.sql_repositories import SQLTermRepository
@@ -44,14 +45,22 @@ async def session(postgres_url: str) -> AsyncGenerator[AsyncSession]:
     await engine.dispose()
 
 
-def _term(term_id: str, *categories: str) -> Term:
+def _term(
+    term_id: str,
+    *categories: str,
+    difficulty: Difficulty = Difficulty.MODERATE,
+    examples: tuple[str, ...] = (),
+    definition: str = "",
+) -> Term:
     return Term(
         id=term_id,
         term=term_id.upper(),
         expansion=f"{term_id} expansion",
-        definitions=(f"{term_id} definition.",),
+        definitions=(definition or f"{term_id} definition.",),
         categories=tuple(Category(slug=c) for c in categories)
         or (Category(slug="architecture"),),
+        difficulty=difficulty,
+        examples=examples,
     )
 
 
@@ -144,3 +153,72 @@ async def test_categories_empty_when_bank_is_empty(session: AsyncSession) -> Non
     repo = SQLTermRepository(session)
 
     assert await repo.categories() == ()
+
+
+@pytest.mark.asyncio
+async def test_random_scopes_to_min_difficulty(session: AsyncSession) -> None:
+    repo = SQLTermRepository(session)
+    await repo.upsert(_term("easy", difficulty=Difficulty.EASY))
+    await repo.upsert(_term("hard", difficulty=Difficulty.HARD))
+    await session.commit()
+
+    result = await repo.random(min_difficulty=int(Difficulty.MODERATE))
+
+    assert result is not None
+    assert result.id == "hard"
+
+
+@pytest.mark.asyncio
+async def test_random_scopes_to_require_examples(session: AsyncSession) -> None:
+    repo = SQLTermRepository(session)
+    await repo.upsert(_term("no-examples", examples=()))
+    await repo.upsert(_term("with-examples", examples=("An example.",)))
+    await session.commit()
+
+    result = await repo.random(require_examples=True)
+
+    assert result is not None
+    assert result.id == "with-examples"
+
+
+@pytest.mark.asyncio
+async def test_random_scopes_to_min_definition_length(session: AsyncSession) -> None:
+    repo = SQLTermRepository(session)
+    await repo.upsert(_term("short", definition="Too short."))
+    await repo.upsert(_term("long", definition="x" * 40))
+    await session.commit()
+
+    result = await repo.random(min_definition_length=40)
+
+    assert result is not None
+    assert result.id == "long"
+
+
+@pytest.mark.asyncio
+async def test_random_returns_none_when_no_term_matches_the_filters(
+    session: AsyncSession,
+) -> None:
+    repo = SQLTermRepository(session)
+    await repo.upsert(_term("uow"))  # MODERATE difficulty, no examples
+    await session.commit()
+
+    assert await repo.random(require_examples=True) is None
+
+
+@pytest.mark.asyncio
+async def test_random_falls_back_within_filters_once_excluded(
+    session: AsyncSession,
+) -> None:
+    """The excluded_ids fallback recursion must forward every filter — an
+    exhausted Boss round should never fall back to an ineligible term."""
+    repo = SQLTermRepository(session)
+    await repo.upsert(_term("eligible", difficulty=Difficulty.HARD))
+    await repo.upsert(_term("ineligible", difficulty=Difficulty.EASY))
+    await session.commit()
+
+    result = await repo.random(
+        frozenset({"eligible"}), min_difficulty=int(Difficulty.MODERATE)
+    )
+
+    assert result is not None
+    assert result.id == "eligible"  # falls back within the filter, not to "ineligible"

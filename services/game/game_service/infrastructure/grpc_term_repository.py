@@ -19,6 +19,7 @@ from game_service.application.ports import TermRepository
 from game_service.domain.term import Category
 from game_service.domain.term import Difficulty
 from game_service.domain.term import Term
+from game_service.domain.term import TermFilter
 
 logger = logging.getLogger(__name__)
 
@@ -80,10 +81,26 @@ class GrpcTermRepository(TermRepository):
         self,
         excluded_ids: frozenset[str] = frozenset(),
         category: str | None = None,
+        term_filter: TermFilter | None = None,
     ) -> Term | None:
         try:
             request = term_pb2.GetRandomRequest(
-                excluded_ids=excluded_ids, category=category
+                excluded_ids=excluded_ids,
+                category=category,
+                min_difficulty=(
+                    int(term_filter.min_difficulty)
+                    if term_filter is not None
+                    and term_filter.min_difficulty is not None
+                    else None
+                ),
+                require_examples=(
+                    term_filter.require_examples if term_filter is not None else None
+                ),
+                min_definition_length=(
+                    term_filter.min_definition_length
+                    if term_filter is not None
+                    else None
+                ),
             )
             reply = await self._stub.GetRandom(request)
         except grpc.aio.AioRpcError as exc:

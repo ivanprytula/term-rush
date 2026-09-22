@@ -13,6 +13,7 @@ from game_service.domain.outcome import GradeOutcome
 from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
 from game_service.domain.term import Term
+from game_service.domain.term import TermFilter
 from game_service.domain.term_stats import TermStats
 
 
@@ -28,6 +29,7 @@ class TermRepository(ABC):
         self,
         excluded_ids: frozenset[str] = frozenset(),
         category: str | None = None,
+        term_filter: TermFilter | None = None,
     ) -> Term | None:
         """Fetch a random term, avoiding excluded_ids where possible.
 
@@ -35,10 +37,14 @@ class TermRepository(ABC):
         category slug (a player-chosen collection: "python-keywords",
         "abbreviations", ...). None means the whole bank, as before.
 
-        content-service falls back to the full bank (category applied,
-        excluded_ids applied) once excluded_ids covers every matching
-        term, rather than failing — None only if no term matches
-        category at all.
+        term_filter, if given, further scopes the pick to terms meeting
+        content-level constraints (e.g. TermFilter.boss_eligible()). None
+        means no additional filtering.
+
+        content-service falls back to the full matching set (category and
+        term_filter still applied, excluded_ids applied) once excluded_ids
+        covers every matching term, rather than failing — None only if no
+        term matches category/term_filter at all.
         """
 
     @abstractmethod

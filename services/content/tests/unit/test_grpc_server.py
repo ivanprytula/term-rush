@@ -7,6 +7,7 @@ from term_proto import term_pb2
 
 from content_service.api.grpc.server import TermServiceServicer
 from content_service.domain.term import Category
+from content_service.domain.term import Difficulty
 from content_service.domain.term import Term
 from content_service.infrastructure.memory import InMemoryUnitOfWork
 
@@ -63,6 +64,50 @@ async def test_get_random_not_found_when_category_has_no_terms(term: Term) -> No
 
     reply = await servicer.GetRandom(
         term_pb2.GetRandomRequest(category="nonexistent-category"),
+        context=None,  # type: ignore
+    )
+
+    assert not reply.found
+
+
+@pytest.mark.asyncio
+async def test_get_random_forwards_content_filters(term: Term) -> None:
+    """min_difficulty/require_examples/min_definition_length all reach the
+    use case — a Boss-eligible term is drawn over an ineligible one."""
+    eligible = term.model_copy(
+        update={
+            "id": "eligible",
+            "difficulty": Difficulty.HARD,
+            "examples": ("An example.",),
+            "definitions": ("x" * 40,),
+        }
+    )
+    ineligible = term.model_copy(update={"id": "ineligible"})
+    servicer = _servicer(
+        InMemoryUnitOfWork(terms={eligible.id: eligible, ineligible.id: ineligible})
+    )
+
+    reply = await servicer.GetRandom(
+        term_pb2.GetRandomRequest(
+            min_difficulty=int(Difficulty.MODERATE),
+            require_examples=True,
+            min_definition_length=40,
+        ),
+        context=None,  # type: ignore
+    )
+
+    assert reply.found
+    assert reply.id == "eligible"
+
+
+@pytest.mark.asyncio
+async def test_get_random_not_found_when_no_term_matches_content_filters(
+    term: Term,
+) -> None:
+    servicer = _servicer(InMemoryUnitOfWork(terms={term.id: term}))
+
+    reply = await servicer.GetRandom(
+        term_pb2.GetRandomRequest(require_examples=True),
         context=None,  # type: ignore
     )
 

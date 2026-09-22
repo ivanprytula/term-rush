@@ -13,12 +13,18 @@ class GetByIdRequest(_message.Message):
     def __init__(self, term_id: _Optional[str] = ...) -> None: ...
 
 class GetRandomRequest(_message.Message):
-    __slots__ = ("excluded_ids", "category")
+    __slots__ = ("excluded_ids", "category", "min_difficulty", "require_examples", "min_definition_length")
     EXCLUDED_IDS_FIELD_NUMBER: _ClassVar[int]
     CATEGORY_FIELD_NUMBER: _ClassVar[int]
+    MIN_DIFFICULTY_FIELD_NUMBER: _ClassVar[int]
+    REQUIRE_EXAMPLES_FIELD_NUMBER: _ClassVar[int]
+    MIN_DEFINITION_LENGTH_FIELD_NUMBER: _ClassVar[int]
     excluded_ids: _containers.RepeatedScalarFieldContainer[str]
     category: str
-    def __init__(self, excluded_ids: _Optional[_Iterable[str]] = ..., category: _Optional[str] = ...) -> None: ...
+    min_difficulty: int
+    require_examples: bool
+    min_definition_length: int
+    def __init__(self, excluded_ids: _Optional[_Iterable[str]] = ..., category: _Optional[str] = ..., min_difficulty: _Optional[int] = ..., require_examples: _Optional[bool] = ..., min_definition_length: _Optional[int] = ...) -> None: ...
 
 class ListCategoriesRequest(_message.Message):
     __slots__ = ()
