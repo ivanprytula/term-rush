@@ -126,6 +126,13 @@ class SQLTermRepository(TermRepository):
         result = await self.session.execute(stmt)
         return tuple(sorted(result.scalars().all()))
 
+    async def all_ids(self) -> tuple[str, ...]:
+        """Every term id, sorted in SQL so an unstable order can't
+        silently change a Daily 20 puzzle."""
+        stmt = select(TermModel.id).order_by(TermModel.id)
+        result = await self.session.execute(stmt)
+        return tuple(result.scalars().all())
+
     async def upsert(self, term: Term) -> None:
         """Create the term, or replace it if the ID already exists."""
         stmt = insert(TermModel).values(id=term.id, data=term.model_dump_json())

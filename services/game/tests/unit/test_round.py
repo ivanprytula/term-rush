@@ -348,3 +348,88 @@ def test_record_raises_round_over_after_boss_round_already_answered() -> None:
 
     with pytest.raises(RoundOver):
         round_.record(_verdict_answer(Verdict.CORRECT), now)
+
+
+def _daily_20_term_ids(size: int = constants.DAILY_20_ROUND_SIZE) -> tuple[str, ...]:
+    return tuple(f"term-{i}" for i in range(size))
+
+
+def test_daily_20_not_over_at_nineteen_answers() -> None:
+    round_ = GameRound(
+        id="s1",
+        created_at=datetime.now(UTC),
+        mode=RoundMode.DAILY_20,
+        term_ids=_daily_20_term_ids(),
+        answers=(_verdict_answer(Verdict.CORRECT),) * 19,
+    )
+
+    assert round_.is_over(datetime.now(UTC)) is False
+
+
+def test_daily_20_is_over_at_twenty_answers() -> None:
+    round_ = GameRound(
+        id="s1",
+        created_at=datetime.now(UTC),
+        mode=RoundMode.DAILY_20,
+        term_ids=_daily_20_term_ids(),
+        answers=(_verdict_answer(Verdict.CORRECT),) * constants.DAILY_20_ROUND_SIZE,
+    )
+
+    assert round_.is_over(datetime.now(UTC)) is True
+
+
+def test_daily_20_is_over_reflects_a_smaller_snapshot_than_the_default_size() -> None:
+    """A bank smaller than DAILY_20_ROUND_SIZE snapshots fewer term_ids —
+    is_over must end the round at that real count, not wait for 20 answers
+    that can never arrive (GetNextTerm would run out of terms first)."""
+    round_ = GameRound(
+        id="s1",
+        created_at=datetime.now(UTC),
+        mode=RoundMode.DAILY_20,
+        term_ids=("a", "b", "c"),
+        answers=(_verdict_answer(Verdict.CORRECT),) * 3,
+    )
+
+    assert round_.is_over(datetime.now(UTC)) is True
+
+
+def test_record_raises_round_over_after_daily_20_cap_reached() -> None:
+    now = datetime.now(UTC)
+    round_ = GameRound(
+        id="s1",
+        created_at=now,
+        mode=RoundMode.DAILY_20,
+        term_ids=_daily_20_term_ids(),
+        answers=(_verdict_answer(Verdict.CORRECT),) * constants.DAILY_20_ROUND_SIZE,
+    )
+
+    with pytest.raises(RoundOver):
+        round_.record(_verdict_answer(Verdict.CORRECT), now)
+
+
+def test_terms_remaining_counts_down_for_daily_20() -> None:
+    round_ = GameRound(
+        id="s1",
+        created_at=datetime.now(UTC),
+        mode=RoundMode.DAILY_20,
+        term_ids=tuple(f"term-{i}" for i in range(constants.DAILY_20_ROUND_SIZE)),
+        answers=(_verdict_answer(Verdict.CORRECT),) * 5,
+    )
+
+    assert round_.terms_remaining == constants.DAILY_20_ROUND_SIZE - 5
+
+
+def test_terms_remaining_reflects_a_smaller_snapshot_than_the_default_size() -> None:
+    """A bank smaller than DAILY_20_ROUND_SIZE snapshots fewer term_ids —
+    terms_remaining must track that real count, not the constant (the bug
+    this test locks in: it was originally computed from the constant and
+    would silently report 20 even when only 10 terms were ever snapshotted)."""
+    round_ = GameRound(
+        id="s1",
+        created_at=datetime.now(UTC),
+        mode=RoundMode.DAILY_20,
+        term_ids=("a", "b", "c"),
+        answers=(_verdict_answer(Verdict.CORRECT),),
+    )
+
+    assert round_.terms_remaining == 2

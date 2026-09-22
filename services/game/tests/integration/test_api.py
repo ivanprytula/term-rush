@@ -91,6 +91,32 @@ def client_and_uow() -> Generator[tuple[TestClient, InMemoryUnitOfWork]]:
     app.dependency_overrides.pop(get_unit_of_work, None)
 
 
+@pytest.fixture
+def client_with_large_bank() -> Generator[TestClient]:
+    """A client whose in-memory term bank has 30 terms — large enough for
+    a Daily 20 round to snapshot a full 20-term set, not degrade to
+    "however many terms exist"."""
+    terms = {
+        f"term-{i:03d}": Term(
+            id=f"term-{i:03d}",
+            term=f"Term {i}",
+            expansion=f"expansion {i}",
+            definitions=(f"Definition of term {i}.",),
+            categories=(Category(slug="architecture"),),
+        )
+        for i in range(30)
+    }
+    uow = InMemoryUnitOfWork(terms=terms)
+
+    async def override_get_unit_of_work():
+        yield uow
+
+    app.dependency_overrides[get_unit_of_work] = override_get_unit_of_work
+    with TestClient(app) as client:
+        yield client
+    app.dependency_overrides.pop(get_unit_of_work, None)
+
+
 def test_health(client: TestClient) -> None:
     """GET /health returns ok."""
     response = client.get("/health")
@@ -340,6 +366,17 @@ def test_boss_round_ends_after_one_submission(
         json={"term_id": "uow", "answer": "a second answer"},
     )
     assert second_submit.status_code == 422
+
+
+def test_create_daily_20_round_returns_terms_remaining_twenty(
+    client_with_large_bank: TestClient,
+) -> None:
+    response = client_with_large_bank.post("/game-rounds", json={"mode": "daily_20"})
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["mode"] == "daily_20"
+    assert body["terms_remaining"] == 20
 
 
 def test_submit_answer_rejects_expired_sprint_round(

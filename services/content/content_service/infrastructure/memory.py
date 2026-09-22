@@ -51,6 +51,9 @@ class InMemoryTermRepository(TermRepository):
         slugs = {c.slug for t in self.terms.values() for c in t.categories}
         return tuple(sorted(slugs))
 
+    async def all_ids(self) -> tuple[str, ...]:
+        return tuple(sorted(self.terms.keys()))
+
     async def upsert(self, term: Term) -> None:
         self.terms[term.id] = term
 

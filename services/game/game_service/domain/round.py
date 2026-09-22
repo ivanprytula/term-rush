@@ -176,11 +176,14 @@ class GameRound(BaseModel):
 
     @property
     def terms_remaining(self) -> int | None:
-        """Daily 20 only; None outside it. How many of the day's 20 terms
-        are left to answer."""
+        """Daily 20 only; None outside it. How many terms are left to
+        answer — against the round's own snapshotted term_ids, not the
+        DAILY_20_ROUND_SIZE constant, since a smaller bank degrades to
+        however many terms actually exist (see daily_term_ids)."""
         if self.mode is not RoundMode.DAILY_20:
             return None
-        return constants.DAILY_20_ROUND_SIZE - len(self.answers)
+        assert self.term_ids is not None  # set at creation for this mode
+        return len(self.term_ids) - len(self.answers)
 
     def is_over(self, now: datetime) -> bool:
         """Whether this round has reached its terminal state, whatever ends
@@ -194,7 +197,8 @@ class GameRound(BaseModel):
         if self.mode is RoundMode.BOSS:
             return len(self.answers) >= constants.BOSS_ROUND_SIZE
         if self.mode is RoundMode.DAILY_20:
-            return len(self.answers) >= constants.DAILY_20_ROUND_SIZE
+            assert self.term_ids is not None  # set at creation for this mode
+            return len(self.answers) >= len(self.term_ids)
         return False
 
     def record(self, answer: SubmittedAnswer, now: datetime) -> GameRound:

@@ -12,6 +12,7 @@ from datetime import datetime
 from hashlib import sha256
 
 from game_service.application.ports import UnitOfWork
+from game_service.domain.daily import daily_term_ids
 from game_service.domain.graders import AnswerEvaluator
 from game_service.domain.graders import build_deterministic_evaluator
 from game_service.domain.llm_grader import LLMRubricGrader
@@ -301,9 +302,21 @@ class CreateGameRound:
         duration_seconds: int | None = None,
     ) -> GameRound:
         """Mint a new round and persist it. duration_seconds is ignored
-        outside Sprint mode."""
+        outside Sprint mode.
+
+        Raises ValueError if mode is DAILY_20 and the term bank is empty
+        (or unreachable) — an empty daily set could never be played anyway.
+        """
         async with self.uow:
-            round_ = GameRound.start(datetime.now(UTC), mode, duration_seconds)
+            term_ids: tuple[str, ...] | None = None
+            if mode is RoundMode.DAILY_20:
+                all_ids = await self.uow.terms.all_ids()
+                term_ids = daily_term_ids(datetime.now(UTC).date(), all_ids)
+                if not term_ids:
+                    raise ValueError("No terms available")
+            round_ = GameRound.start(
+                datetime.now(UTC), mode, duration_seconds, term_ids
+            )
             await self.uow.rounds.save(round_)
             return round_
 
@@ -338,10 +351,10 @@ class GetLeaderboard:
 class GetNextTerm:
     """Fetch the term to present to the player next.
 
-    Renamed from GetRandomTerm: Daily 20 (a later slice) will walk its
-    round's snapshotted term_ids in positional order rather than drawing
-    randomly, so "random" is not an accurate name for what this use case
-    does across every mode. Today every mode still gets a random draw."""
+    Renamed from GetRandomTerm: Daily 20 walks its round's snapshotted
+    term_ids in positional order rather than drawing randomly, so "random"
+    was never an accurate name for what this use case does across every
+    mode."""
 
     def __init__(self, uow: UnitOfWork) -> None:
         self.uow = uow
@@ -354,24 +367,40 @@ class GetNextTerm:
         """Return the next term, optionally scoped to a category (a
         player-chosen collection: "python-keywords", "abbreviations", ...).
         Raises ValueError if no term matches (empty bank, category has no
-        terms, or — Boss Round — no boss-eligible term exists).
+        terms, Boss Round with no boss-eligible term, or — Daily 20 — the
+        round's snapshotted term set is exhausted, which should never
+        happen since is_over already gates at the same cap).
 
         round_id is optional: unauthenticated callers (or callers before
         a round exists) still get a plain random term, unexcluded. A Boss
         round derives its filter from the round's own mode rather than a
         caller-supplied parameter — a client should never be able to ask
         for a boss-eligible term in a Classic round, and this way GET
-        /terms/random needs no new query param for it.
+        /terms/random needs no new query param for it. Daily 20 skips the
+        random draw entirely: it serves its round's term_ids in order,
+        indexed by how many answers already exist.
         """
         async with self.uow:
             excluded_ids: frozenset[str] = frozenset()
             term_filter: TermFilter | None = None
+            round_: GameRound | None = None
             if round_id is not None:
                 round_ = await self.uow.rounds.by_id(round_id)
                 if round_ is not None:
                     excluded_ids = frozenset(a.term_id for a in round_.answers)
                     if round_.mode is RoundMode.BOSS:
                         term_filter = TermFilter.boss_eligible()
+
+            if round_ is not None and round_.mode is RoundMode.DAILY_20:
+                assert round_.term_ids is not None  # set at creation
+                index = len(round_.answers)
+                if index >= len(round_.term_ids):
+                    raise ValueError("Daily 20 round's term set is exhausted")
+                term = await self.uow.terms.by_id(round_.term_ids[index])
+                if term is None:
+                    raise ValueError("No terms available")
+                return term
+
             term = await self.uow.terms.random(excluded_ids, category, term_filter)
             if term is None:
                 if term_filter is not None:

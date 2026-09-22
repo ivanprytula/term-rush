@@ -49,6 +49,11 @@ class TermServiceStub:
                 request_serializer=term__pb2.ListCategoriesRequest.SerializeToString,
                 response_deserializer=term__pb2.ListCategoriesReply.FromString,
                 _registered_method=True)
+        self.ListTermIds = channel.unary_unary(
+                '/termrush.content.v1.TermService/ListTermIds',
+                request_serializer=term__pb2.ListTermIdsRequest.SerializeToString,
+                response_deserializer=term__pb2.ListTermIdsReply.FromString,
+                _registered_method=True)
 
 
 class TermServiceServicer:
@@ -72,6 +77,12 @@ class TermServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListTermIds(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_TermServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -89,6 +100,11 @@ def add_TermServiceServicer_to_server(servicer, server):
                     servicer.ListCategories,
                     request_deserializer=term__pb2.ListCategoriesRequest.FromString,
                     response_serializer=term__pb2.ListCategoriesReply.SerializeToString,
+            ),
+            'ListTermIds': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListTermIds,
+                    request_deserializer=term__pb2.ListTermIdsRequest.FromString,
+                    response_serializer=term__pb2.ListTermIdsReply.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -172,6 +188,33 @@ class TermService:
             '/termrush.content.v1.TermService/ListCategories',
             term__pb2.ListCategoriesRequest.SerializeToString,
             term__pb2.ListCategoriesReply.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListTermIds(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/termrush.content.v1.TermService/ListTermIds',
+            term__pb2.ListTermIdsRequest.SerializeToString,
+            term__pb2.ListTermIdsReply.FromString,
             options,
             channel_credentials,
             insecure,
