@@ -140,9 +140,9 @@ function ModePicker({
 }
 
 const VERDICT_STYLE: Record<string, { color: string; label: string }> = {
-  correct: { color: "text-phosphor", label: "CORRECT" },
-  partial: { color: "text-amber", label: "PARTIAL" },
-  incorrect: { color: "text-text-muted", label: "NOT QUITE" },
+  correct: { color: "text-verdict-correct", label: "CORRECT" },
+  partial: { color: "text-verdict-partial", label: "PARTIAL" },
+  incorrect: { color: "text-verdict-incorrect", label: "NOT QUITE" },
 };
 
 // Color alone doesn't carry the verdict (WCAG 1.4.1) — bracket-delimited
@@ -245,6 +245,8 @@ function ResultPanel({
 function RoundSummary({
   answers,
   heading = "round complete",
+  selectedMode,
+  onModeChange,
   onPlayAgain,
 }: {
   answers: SubmitAnswerResponse[];
@@ -252,6 +254,8 @@ function RoundSummary({
   // (score + verdict breakdown), just a different heading per mode (see
   // ROUND_END_HEADING) for why the round ended.
   heading?: string;
+  selectedMode: RoundMode;
+  onModeChange: (mode: RoundMode) => void;
   onPlayAgain: () => void;
 }) {
   const totalScore = answers.reduce((sum, a) => sum + a.score, 0);
@@ -268,10 +272,11 @@ function RoundSummary({
         <p className="text-3xl font-bold tracking-tight">{totalScore}</p>
       </div>
       <div className="flex justify-center gap-4 text-sm">
-        <span className="text-phosphor">{counts.correct} correct</span>
-        <span className="text-amber">{counts.partial} partial</span>
-        <span className="text-text-muted">{counts.incorrect} incorrect</span>
+        <span className="text-verdict-correct">{counts.correct} correct</span>
+        <span className="text-verdict-partial">{counts.partial} partial</span>
+        <span className="text-verdict-incorrect">{counts.incorrect} incorrect</span>
       </div>
+      <ModePicker selected={selectedMode} onChange={onModeChange} />
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -724,6 +729,8 @@ export default function App() {
           <RoundSummary
             answers={answers}
             heading={ROUND_END_HEADING[roundMode]}
+            selectedMode={selectedMode}
+            onModeChange={setSelectedMode}
             onPlayAgain={startNewRound}
           />
         )}

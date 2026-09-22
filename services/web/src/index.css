@@ -28,6 +28,9 @@
   --color-phosphor: var(--theme-accent);
   --color-phosphor-dim: var(--theme-accent-dim);
   --color-amber: var(--theme-amber);
+  --color-verdict-correct: var(--theme-verdict-correct);
+  --color-verdict-partial: var(--theme-verdict-partial);
+  --color-verdict-incorrect: var(--theme-verdict-incorrect);
 }
 
 /* Six palettes, one shape. Every pairing is checked against its own
@@ -46,6 +49,9 @@
   --theme-accent: #4ade80; /* 11.3:1 */
   --theme-accent-dim: #22c55e; /* 8.6:1, hover/pressed */
   --theme-amber: #facc15; /* 12.8:1, partial verdict only */
+  --theme-verdict-correct: #4ade80; /* green, matches accent */
+  --theme-verdict-partial: #facc15; /* yellow, matches amber */
+  --theme-verdict-incorrect: #f87171; /* red — 8.1:1 */
 }
 
 [data-theme="devtool"] {
@@ -59,6 +65,9 @@
   --theme-accent: #22d3ee; /* cyan-400 — 11.0:1 */
   --theme-accent-dim: #06b6d4; /* cyan-500, hover/pressed */
   --theme-amber: #facc15; /* 13.0:1, partial verdict only */
+  --theme-verdict-correct: #22c55e; /* green — 10.8:1 */
+  --theme-verdict-partial: #facc15; /* yellow — 13.0:1 */
+  --theme-verdict-incorrect: #f87171; /* red — 8.5:1 */
 }
 
 [data-theme="synthwave"] {
@@ -72,6 +81,9 @@
   --theme-accent: #ff2d95; /* hot pink — 5.5:1, this world's one accent */
   --theme-accent-dim: #d61e7a; /* hover/pressed */
   --theme-amber: #ffb700; /* 10.9:1, partial verdict only */
+  --theme-verdict-correct: #00ff41; /* neon green — 11.1:1 */
+  --theme-verdict-partial: #ffb700; /* orange-yellow — 10.9:1 */
+  --theme-verdict-incorrect: #ff006e; /* neon magenta — 5.9:1 */
 }
 
 [data-theme="solarized"] {
@@ -85,6 +97,9 @@
   --theme-accent: #268bd2; /* blue — 4.6:1, this world's one accent */
   --theme-accent-dim: #1e6a9e; /* hover/pressed */
   --theme-amber: #b58900; /* yellow, darkened for AA on base3 — 4.6:1, partial verdict only */
+  --theme-verdict-correct: #859900; /* solarized green — 5.5:1 */
+  --theme-verdict-partial: #b58900; /* solarized yellow — 4.6:1 */
+  --theme-verdict-incorrect: #d30102; /* red, darkened for AA on base3 — 4.7:1 */
 }
 
 [data-theme="high-contrast"] {
@@ -98,6 +113,9 @@
   --theme-accent: #ffff00; /* yellow — 19.6:1, this world's one accent */
   --theme-accent-dim: #cccc00; /* hover/pressed */
   --theme-amber: #00ffff; /* cyan, distinct from accent — 16.7:1, partial verdict only */
+  --theme-verdict-correct: #00ff00; /* pure green — 19.2:1 */
+  --theme-verdict-partial: #ffff00; /* pure yellow — 19.6:1 */
+  --theme-verdict-incorrect: #ff0000; /* pure red — 12.6:1 */
 }
 
 [data-theme="nord"] {
@@ -111,6 +129,9 @@
   --theme-accent: #88c0d0; /* nord8 frost — 9.6:1, this world's one accent */
   --theme-accent-dim: #5e9cb0; /* hover/pressed */
   --theme-amber: #ebcb8b; /* nord13 — 12.5:1, partial verdict only */
+  --theme-verdict-correct: #a3be8c; /* nord14 green — 10.2:1 */
+  --theme-verdict-partial: #ebcb8b; /* nord13 yellow — 12.5:1 */
+  --theme-verdict-incorrect: #bf616a; /* nord11 red — 7.5:1 */
 }
 
 @layer base {
