@@ -342,10 +342,14 @@ class GetLeaderboard:
     def __init__(self, uow: UnitOfWork) -> None:
         self.uow = uow
 
-    async def execute(self, limit: int) -> list[GameRound]:
-        """Return up to `limit` rounds, highest total_score first."""
+    async def execute(
+        self, limit: int, mode: RoundMode | None = None
+    ) -> list[GameRound]:
+        """Return up to `limit` rounds, highest total_score first.
+
+        mode, if given, scopes the board to that mode only."""
         async with self.uow:
-            return await self.uow.rounds.top_by_score(limit)
+            return await self.uow.rounds.top_by_score(limit, mode)
 
 
 class GetNextTerm:

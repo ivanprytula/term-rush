@@ -598,3 +598,11 @@ def test_get_term_categories_lists_every_collection(
 
     assert response.status_code == 200
     assert response.json() == {"categories": ["architecture", "python-keywords"]}
+
+
+def test_get_leaderboard_rejects_an_unknown_mode(client: TestClient) -> None:
+    """The mode query param is enum-typed, so an unknown value 422s before
+    the use case ever runs — no repository call needed to test this."""
+    response = client.get("/leaderboard", params={"mode": "nonexistent-mode"})
+
+    assert response.status_code == 422

@@ -11,6 +11,7 @@ from game_service.application.ports import RoundRepository
 from game_service.application.ports import TermStatsRepository
 from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
+from game_service.domain.round import RoundMode
 from game_service.domain.term_stats import TermStats
 from game_service.infrastructure.database import GameRoundModel
 from game_service.infrastructure.database import TermStatsModel
@@ -38,21 +39,27 @@ class SQLRoundRepository(RoundRepository):
             id=round_.id,
             data=round_.model_dump_json(),
             total_score=round_.total_score,
+            mode=round_.mode.value,
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=["id"],
-            set_={"data": stmt.excluded.data, "total_score": stmt.excluded.total_score},
+            set_={
+                "data": stmt.excluded.data,
+                "total_score": stmt.excluded.total_score,
+                "mode": stmt.excluded.mode,
+            },
         )
         await self.session.execute(stmt)
 
-    async def top_by_score(self, limit: int) -> list[GameRound]:
+    async def top_by_score(
+        self, limit: int, mode: RoundMode | None = None
+    ) -> list[GameRound]:
         """Fetch the top rounds by total_score, sorted in SQL via the
         indexed column rather than deserializing every row's JSON."""
-        stmt = (
-            select(GameRoundModel)
-            .order_by(desc(GameRoundModel.total_score))
-            .limit(limit)
-        )
+        stmt = select(GameRoundModel).order_by(desc(GameRoundModel.total_score))
+        if mode is not None:
+            stmt = stmt.where(GameRoundModel.mode == mode.value)
+        stmt = stmt.limit(limit)
         result = await self.session.execute(stmt)
         return [GameRound.model_validate_json(m.data) for m in result.scalars()]
 

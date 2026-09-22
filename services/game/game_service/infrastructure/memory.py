@@ -15,6 +15,7 @@ from game_service.application.ports import UnitOfWork
 from game_service.domain.outcome import GradeOutcome
 from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
+from game_service.domain.round import RoundMode
 from game_service.domain.term import Term
 from game_service.domain.term import TermFilter
 from game_service.domain.term_stats import TermStats
@@ -68,7 +69,9 @@ class InMemoryRoundRepository(RoundRepository):
     async def save(self, round_: GameRound) -> None:
         self.rounds[round_.id] = round_
 
-    async def top_by_score(self, limit: int) -> list[GameRound]:
+    async def top_by_score(
+        self, limit: int, mode: RoundMode | None = None
+    ) -> list[GameRound]:
         """Not supported: the leaderboard query is a SQL-index demonstration,
         not a feature this adapter needs to fake."""
         raise NotImplementedError("Leaderboard requires the SQL adapter")
