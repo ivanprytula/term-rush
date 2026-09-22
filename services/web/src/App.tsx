@@ -300,7 +300,7 @@ function RoundSummary({
 // Condensed for in-app reading; full rules live in docs/game-rules.md.
 function HowToPlay() {
   return (
-    <details className="bg-surface border border-surface-border text-sm text-text-dim open:pb-4">
+    <details className="fixed top-14 right-4 z-10 w-fit max-w-[calc(100vw-2rem)] bg-surface border border-surface-border text-sm text-text-dim open:pb-4">
       <summary className="cursor-pointer select-none px-4 py-3 font-bold text-text">
         $ man term-rush
       </summary>
