@@ -24,6 +24,7 @@ dependencies = [
   "term-proto",
   "termrush-core",
   "aiokafka>=0.12",
+  "strawberry-graphql[fastapi]>=0.327.7",
 ]
 
 [tool.uv.sources]

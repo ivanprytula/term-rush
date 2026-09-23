@@ -14,6 +14,8 @@ export default defineConfig({
     proxy: {
       "/game-rounds": "http://localhost:8000",
       "/terms": "http://localhost:8000",
+      "/game-config": "http://localhost:8000",
+      "/graphql": "http://localhost:8000",
     },
   },
 });

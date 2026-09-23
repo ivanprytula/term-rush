@@ -42,7 +42,7 @@ doesn't exist until the linked phase starts.
 | REST, domain-language endpoints | ✅ P1 | `api/routers/` — `POST /game-rounds/{id}/answers/submit`, never `/api/process` |
 | OpenAPI → generated TS client | ✅ P1 | `just generate-client`; CI's `web-build` job regenerates from the live schema and runs `tsc -b` — API drift fails the build |
 | gRPC | ✅ P3 | `game-service` → `content-service` term lookup. Chosen for this hop specifically: high-frequency, internal, schema-first, latency-sensitive — the case where gRPC beats REST rather than merely differs from it. ADR-0009. |
-| GraphQL BFF | ⏳ P3 | Strawberry. One query replacing 3 REST round-trips for the session screen, optionally including the REST-owned `gameConfig` read model — measured, not asserted. ADR-0010. |
+| GraphQL BFF | ✅ P3 | Strawberry, mounted inside `game-service` at `/graphql`. One `sessionScreen` query replacing 2 REST round-trips (`gameConfig`, `termCategories`); `randomTerm` is in the schema but unused — the client's term fetch needs `round_id`, which the query doesn't take. ADR-0010. |
 
 **The point to make in an interview:** three protocols, three *reasons*. REST for the
 public API, gRPC for the internal hot path, GraphQL for the client aggregation problem.
