@@ -2,22 +2,61 @@
 
 from __future__ import annotations
 
-import json
-
-from sqlalchemy import Integer
-from sqlalchemy import bindparam
-from sqlalchemy import cast
-from sqlalchemy import column
+from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import select
-from sqlalchemy import true
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from content_service.application.ports import TermRepository
 from content_service.domain.term import Term
+from content_service.infrastructure.database import TermAliasModel
+from content_service.infrastructure.database import TermCategoryModel
+from content_service.infrastructure.database import TermCommonMistakeModel
+from content_service.infrastructure.database import TermDefinitionModel
+from content_service.infrastructure.database import TermExampleModel
 from content_service.infrastructure.database import TermModel
+from content_service.infrastructure.database import TermPrerequisiteModel
+from content_service.infrastructure.database import TermRelatedModel
+
+_CHILD_RELATIONSHIPS = (
+    "definitions",
+    "aliases",
+    "examples",
+    "categories",
+    "prerequisites",
+    "related",
+    "common_mistakes",
+)
+
+
+def _eager_load(stmt):
+    """Attach a selectinload for every child relationship, so a Term never
+    triggers a lazy-load query per list field (N+1 across 7 tables).
+    """
+    for name in _CHILD_RELATIONSHIPS:
+        stmt = stmt.options(selectinload(getattr(TermModel, name)))
+    return stmt
+
+
+def _to_domain(model: TermModel) -> Term:
+    """Assemble a domain Term from a TermModel and its (already-loaded)
+    child rows, each ordered by its own `position` column.
+    """
+    return Term(
+        id=model.id,
+        term=model.term,
+        expansion=model.expansion,
+        difficulty=model.difficulty,
+        definitions=tuple(d.value for d in model.definitions),
+        aliases=tuple(a.value for a in model.aliases),
+        examples=tuple(e.value for e in model.examples),
+        categories=tuple({"slug": c.slug} for c in model.categories),
+        prerequisites=tuple(p.requires_term_id for p in model.prerequisites),
+        related=tuple(r.related_term_id for r in model.related),
+        common_mistakes=tuple(m.value for m in model.common_mistakes),
+    )
 
 
 class SQLTermRepository(TermRepository):
@@ -28,14 +67,10 @@ class SQLTermRepository(TermRepository):
 
     async def by_id(self, term_id: str) -> Term | None:
         """Fetch a term by ID from the database."""
-        stmt = select(TermModel).where(TermModel.id == term_id)
+        stmt = _eager_load(select(TermModel).where(TermModel.id == term_id))
         result = await self.session.execute(stmt)
         model = result.scalars().first()
-        if not model:
-            return None
-        assert isinstance(model.data, str)
-        data = json.loads(model.data)
-        return Term(**data)
+        return _to_domain(model) if model else None
 
     async def random(
         self,
@@ -48,10 +83,9 @@ class SQLTermRepository(TermRepository):
         """Fetch a random term, avoiding excluded_ids where possible, scoped
         to category and/or content-property constraints if given.
 
-        Every filter applies via jsonb operations on the existing data
-        column (no schema migration) — correct at today's corpus size
-        (~10^3 terms, ADR-0012); a GIN index on data::jsonb is the move if
-        this query ever shows up in EXPLAIN ANALYZE as a real bottleneck.
+        Filters apply against real columns and joined child tables now
+        that the schema is normalized (ADR-0012) — category and difficulty
+        are indexable joins/predicates instead of jsonb operations.
 
         Falls back to the full matching set once excluded_ids covers every
         matching term (a round that has shown everything in its scope
@@ -59,37 +93,26 @@ class SQLTermRepository(TermRepository):
         fallback, so an exhausted Boss round never falls back to an
         ineligible term.
         """
-        stmt = select(TermModel).order_by(func.random()).limit(1)
+        stmt = select(TermModel)
         if category is not None:
-            # bindparam(type_=JSONB), not cast(json.dumps(...), JSONB): the
-            # latter binds the dumped string through the driver's varchar
-            # encoder first, so Postgres receives a JSON string *containing*
-            # JSON text rather than the object itself — @> then never matches.
-            stmt = stmt.where(
-                cast(TermModel.data, JSONB).op("@>")(
-                    bindparam(
-                        "category_filter",
-                        {"categories": [{"slug": category}]},
-                        type_=JSONB,
-                    )
-                )
+            stmt = stmt.join(TermModel.categories).where(
+                TermCategoryModel.slug == category
             )
         if min_difficulty is not None:
-            stmt = stmt.where(
-                cast(cast(TermModel.data, JSONB)["difficulty"].astext, Integer)
-                >= min_difficulty
-            )
+            stmt = stmt.where(TermModel.difficulty >= min_difficulty)
         if require_examples:
-            stmt = stmt.where(
-                func.jsonb_array_length(cast(TermModel.data, JSONB)["examples"]) > 0
-            )
+            stmt = stmt.join(TermModel.examples)
         if min_definition_length is not None:
-            stmt = stmt.where(
-                func.length(cast(TermModel.data, JSONB)["definitions"][0].astext)
-                >= min_definition_length
+            # First definition is the primary one (Term.primary_definition);
+            # position 0 within the join picks it out per term.
+            stmt = stmt.join(TermModel.definitions).where(
+                TermDefinitionModel.position == 0,
+                func.length(TermDefinitionModel.value) >= min_definition_length,
             )
         if excluded_ids:
             stmt = stmt.where(TermModel.id.not_in(excluded_ids))
+        stmt = _eager_load(stmt.order_by(func.random()).limit(1))
+
         result = await self.session.execute(stmt)
         model = result.scalars().first()
         if not model and excluded_ids:
@@ -99,30 +122,11 @@ class SQLTermRepository(TermRepository):
                 require_examples=require_examples,
                 min_definition_length=min_definition_length,
             )
-        if not model:
-            return None
-        assert isinstance(model.data, str)
-        data = json.loads(model.data)
-        return Term(**data)
+        return _to_domain(model) if model else None
 
     async def categories(self) -> tuple[str, ...]:
-        """List every category slug present in the term bank.
-
-        jsonb_array_elements unnests each term's categories array so we can
-        select distinct slugs in SQL rather than deserializing every row.
-        Explicit JOIN ... ON true (a Postgres lateral join, since the
-        function body references terms.data) rather than a comma-join in
-        the FROM clause — same query, but doesn't trip SQLAlchemy's
-        cartesian-product warning.
-        """
-        categories_elem = func.jsonb_array_elements(
-            cast(TermModel.data, JSONB)["categories"]
-        ).table_valued(column("value", JSONB), joins_implicitly=True)
-        stmt = (
-            select(func.distinct(categories_elem.c.value["slug"].astext))
-            .select_from(TermModel)
-            .join(categories_elem, true())
-        )
+        """List every category slug present in the term bank."""
+        stmt = select(func.distinct(TermCategoryModel.slug))
         result = await self.session.execute(stmt)
         return tuple(sorted(result.scalars().all()))
 
@@ -134,9 +138,62 @@ class SQLTermRepository(TermRepository):
         return tuple(result.scalars().all())
 
     async def upsert(self, term: Term) -> None:
-        """Create the term, or replace it if the ID already exists."""
-        stmt = insert(TermModel).values(id=term.id, data=term.model_dump_json())
+        """Create the term, or replace it if the ID already exists.
+
+        Child rows are delete + reinsert on every upsert rather than
+        diffed: Term is frozen and republished as a whole (its own
+        docstring — "never mutated in place"), so there is no partial-list
+        update to preserve, and nothing references a child row by its own
+        identity today.
+        """
+        stmt = insert(TermModel).values(
+            id=term.id,
+            term=term.term,
+            expansion=term.expansion,
+            difficulty=int(term.difficulty),
+        )
         stmt = stmt.on_conflict_do_update(
-            index_elements=["id"], set_={"data": stmt.excluded.data}
+            index_elements=["id"],
+            set_={
+                "term": stmt.excluded.term,
+                "expansion": stmt.excluded.expansion,
+                "difficulty": stmt.excluded.difficulty,
+            },
         )
         await self.session.execute(stmt)
+
+        await self._replace_children(
+            TermDefinitionModel, term.id, "value", term.definitions
+        )
+        await self._replace_children(TermAliasModel, term.id, "value", term.aliases)
+        await self._replace_children(TermExampleModel, term.id, "value", term.examples)
+        await self._replace_children(
+            TermCategoryModel,
+            term.id,
+            "slug",
+            tuple(c.slug for c in term.categories),
+        )
+        await self._replace_children(
+            TermPrerequisiteModel, term.id, "requires_term_id", term.prerequisites
+        )
+        await self._replace_children(
+            TermRelatedModel, term.id, "related_term_id", term.related
+        )
+        await self._replace_children(
+            TermCommonMistakeModel, term.id, "value", term.common_mistakes
+        )
+
+    async def _replace_children(
+        self, model, term_id: str, value_column: str, values: tuple[str, ...]
+    ) -> None:
+        """Delete every existing child row for term_id, then bulk-insert
+        the incoming values in order (position = list index).
+        """
+        await self.session.execute(delete(model).where(model.term_id == term_id))
+        if not values:
+            return
+        rows = [
+            {"term_id": term_id, "position": position, value_column: value}
+            for position, value in enumerate(values)
+        ]
+        await self.session.execute(insert(model), rows)

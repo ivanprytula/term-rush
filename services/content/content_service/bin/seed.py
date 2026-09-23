@@ -13,12 +13,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy.dialects.postgresql import insert
-
 from content_service.api.config import settings
 from content_service.domain.term import Term
-from content_service.infrastructure.database import TermModel
 from content_service.infrastructure.database import create_db_engine
+from content_service.infrastructure.sql_repositories import SQLTermRepository
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +42,12 @@ SEED_TERMS = _load_seed_terms()
 
 
 async def seed() -> None:
-    """Upsert SEED_TERMS into the terms table."""
+    """Upsert SEED_TERMS into the terms table (and their child tables)."""
     engine, session_factory = await create_db_engine(str(settings.DATABASE_URL))
     async with session_factory() as session, session.begin():
+        repository = SQLTermRepository(session)
         for term in SEED_TERMS:
-            stmt = insert(TermModel).values(id=term.id, data=term.model_dump_json())
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["id"], set_={"data": stmt.excluded.data}
-            )
-            await session.execute(stmt)
+            await repository.upsert(term)
     await engine.dispose()
     logger.info("Seeded %d terms.", len(SEED_TERMS))
 
