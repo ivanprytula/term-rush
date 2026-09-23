@@ -8,6 +8,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import MetaData
 from sqlalchemy import String
+from sqlalchemy import Text
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -182,6 +183,26 @@ class TermCommonMistakeModel(_TermChildMixin, Base):
     )
 
     term_row: Mapped[TermModel] = relationship(back_populates="common_mistakes")
+
+
+class ReviewCandidateModel(Base):
+    """A pending/approved/rejected review candidate.
+
+    `term_data` stores the full Term as JSON, deliberately not normalized
+    like terms/term_* — a candidate is provisional, never queried by its
+    own fields (only by status), and approval promotes it into the real
+    normalized terms table via SQLTermRepository.upsert, not by reading
+    columns here.
+    """
+
+    __tablename__ = "review_queue"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    term_data: Mapped[str] = mapped_column(Text, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_file: Mapped[str] = mapped_column(String(512), nullable=False)
+    confidence: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
 
 
 async def create_db_engine(database_url: str) -> tuple[Any, Any]:

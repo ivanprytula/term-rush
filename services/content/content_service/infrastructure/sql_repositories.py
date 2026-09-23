@@ -9,8 +9,12 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from content_service.application.ports import ReviewQueueRepository
 from content_service.application.ports import TermRepository
+from content_service.domain.review import ReviewCandidate
+from content_service.domain.review import ReviewStatus
 from content_service.domain.term import Term
+from content_service.infrastructure.database import ReviewCandidateModel
 from content_service.infrastructure.database import TermAliasModel
 from content_service.infrastructure.database import TermCategoryModel
 from content_service.infrastructure.database import TermCommonMistakeModel
@@ -197,3 +201,52 @@ class SQLTermRepository(TermRepository):
             for position, value in enumerate(values)
         ]
         await self.session.execute(insert(model), rows)
+
+
+def _candidate_to_domain(model: ReviewCandidateModel) -> ReviewCandidate:
+    return ReviewCandidate(
+        id=model.id,
+        term=Term.model_validate_json(model.term_data),
+        source_type=model.source_type,
+        source_file=model.source_file,
+        confidence=model.confidence,
+        status=ReviewStatus(model.status),
+    )
+
+
+class SQLReviewQueueRepository(ReviewQueueRepository):
+    """Query and persist review candidates in PostgreSQL."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def add(self, candidate: ReviewCandidate) -> ReviewCandidate:
+        model = ReviewCandidateModel(
+            term_data=candidate.term.model_dump_json(),
+            source_type=candidate.source_type,
+            source_file=candidate.source_file,
+            confidence=candidate.confidence,
+            status=candidate.status.value,
+        )
+        self.session.add(model)
+        await self.session.flush()  # assigns model.id via the DB sequence
+        return _candidate_to_domain(model)
+
+    async def by_id(self, candidate_id: int) -> ReviewCandidate | None:
+        model = await self.session.get(ReviewCandidateModel, candidate_id)
+        return _candidate_to_domain(model) if model else None
+
+    async def list_by_status(self, status: ReviewStatus) -> tuple[ReviewCandidate, ...]:
+        stmt = (
+            select(ReviewCandidateModel)
+            .where(ReviewCandidateModel.status == status.value)
+            .order_by(ReviewCandidateModel.id)
+        )
+        result = await self.session.execute(stmt)
+        return tuple(_candidate_to_domain(m) for m in result.scalars().all())
+
+    async def set_status(self, candidate_id: int, status: ReviewStatus) -> None:
+        model = await self.session.get(ReviewCandidateModel, candidate_id)
+        if model is None:
+            return
+        model.status = status.value

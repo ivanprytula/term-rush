@@ -9,6 +9,8 @@ from __future__ import annotations
 from abc import ABC
 from abc import abstractmethod
 
+from content_service.domain.review import ReviewCandidate
+from content_service.domain.review import ReviewStatus
 from content_service.domain.term import Term
 
 
@@ -60,6 +62,27 @@ class TermRepository(ABC):
         """Create a term, or replace it if the ID already exists."""
 
 
+class ReviewQueueRepository(ABC):
+    """Read and write the pending-review candidate queue."""
+
+    @abstractmethod
+    async def add(self, candidate: ReviewCandidate) -> ReviewCandidate:
+        """Insert a candidate as pending. Returns it with its assigned id."""
+
+    @abstractmethod
+    async def by_id(self, candidate_id: int) -> ReviewCandidate | None:
+        """Fetch a candidate by its queue id. None if not found."""
+
+    @abstractmethod
+    async def list_by_status(self, status: ReviewStatus) -> tuple[ReviewCandidate, ...]:
+        """Every candidate in the given status, oldest first."""
+
+    @abstractmethod
+    async def set_status(self, candidate_id: int, status: ReviewStatus) -> None:
+        """Transition a candidate's status. No-op if the id doesn't exist —
+        callers check existence via by_id first when they need to know."""
+
+
 class EventPublisher(ABC):
     """Publish domain events for external consumption."""
 
@@ -80,6 +103,7 @@ class UnitOfWork(ABC):
     """
 
     terms: TermRepository
+    review_queue: ReviewQueueRepository
     events: EventPublisher
 
     @abstractmethod

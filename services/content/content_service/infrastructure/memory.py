@@ -7,8 +7,11 @@ import random
 from typing import Any
 
 from content_service.application.ports import EventPublisher
+from content_service.application.ports import ReviewQueueRepository
 from content_service.application.ports import TermRepository
 from content_service.application.ports import UnitOfWork
+from content_service.domain.review import ReviewCandidate
+from content_service.domain.review import ReviewStatus
 from content_service.domain.term import Term
 
 
@@ -58,6 +61,32 @@ class InMemoryTermRepository(TermRepository):
         self.terms[term.id] = term
 
 
+class InMemoryReviewQueueRepository(ReviewQueueRepository):
+    """Store review candidates in a dict, keyed by an auto-incrementing id."""
+
+    def __init__(self) -> None:
+        self.candidates: dict[int, ReviewCandidate] = {}
+        self._next_id = 1
+
+    async def add(self, candidate: ReviewCandidate) -> ReviewCandidate:
+        assigned = candidate.model_copy(update={"id": self._next_id})
+        self.candidates[self._next_id] = assigned
+        self._next_id += 1
+        return assigned
+
+    async def by_id(self, candidate_id: int) -> ReviewCandidate | None:
+        return self.candidates.get(candidate_id)
+
+    async def list_by_status(self, status: ReviewStatus) -> tuple[ReviewCandidate, ...]:
+        return tuple(c for c in self.candidates.values() if c.status == status)
+
+    async def set_status(self, candidate_id: int, status: ReviewStatus) -> None:
+        existing = self.candidates.get(candidate_id)
+        if existing is None:
+            return
+        self.candidates[candidate_id] = existing.model_copy(update={"status": status})
+
+
 class InMemoryEventPublisher(EventPublisher):
     """Collect events in memory for testing."""
 
@@ -76,6 +105,7 @@ class InMemoryUnitOfWork(UnitOfWork):
 
     def __init__(self, terms: dict[str, Term] | None = None) -> None:
         self.terms = InMemoryTermRepository(terms)
+        self.review_queue = InMemoryReviewQueueRepository()
         self.events = InMemoryEventPublisher()
         self._in_transaction = False
         self._lock: asyncio.Lock | None = None
