@@ -12,6 +12,7 @@ from content_service.application.use_cases import ListReviewCandidates
 from content_service.application.use_cases import PublishTerm
 from content_service.application.use_cases import RejectReviewCandidate
 from content_service.application.use_cases import SubmitReviewCandidate
+from content_service.domain.review import ReviewCandidateNotPending
 from content_service.domain.review import ReviewStatus
 from content_service.domain.term import Category
 from content_service.domain.term import Term
@@ -232,8 +233,10 @@ async def test_approve_review_candidate_raises_when_not_pending(term: Term) -> N
     assert candidate.id is not None
     await ApproveReviewCandidate(uow).execute(candidate.id)
 
-    with pytest.raises(ValueError, match="not pending"):
+    with pytest.raises(ReviewCandidateNotPending) as exc_info:
         await ApproveReviewCandidate(uow).execute(candidate.id)
+    assert exc_info.value.candidate_id == candidate.id
+    assert exc_info.value.status == ReviewStatus.APPROVED
 
 
 @pytest.mark.asyncio

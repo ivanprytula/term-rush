@@ -251,6 +251,23 @@ def test_approve_review_candidate_missing_returns_404(
     assert response.status_code == 404
 
 
+def test_approve_review_candidate_already_approved_returns_409(
+    client_with_empty_uow: TestClient,
+) -> None:
+    submitted = client_with_empty_uow.post(
+        "/review-queue/candidates", json=_CANDIDATE_PAYLOAD
+    ).json()
+    client_with_empty_uow.post(f"/review-queue/{submitted['id']}/approve")
+
+    response = client_with_empty_uow.post(f"/review-queue/{submitted['id']}/approve")
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["candidate_id"] == submitted["id"]
+    assert body["current_status"] == "approved"
+    assert body["required_status"] == "pending"
+
+
 def test_reject_review_candidate_never_publishes(
     client_with_empty_uow: TestClient,
 ) -> None:

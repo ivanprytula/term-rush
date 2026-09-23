@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from content_service.application.ports import UnitOfWork
 from content_service.domain.review import ReviewCandidate
+from content_service.domain.review import ReviewCandidateNotPending
 from content_service.domain.review import ReviewStatus
 from content_service.domain.term import Term
 
@@ -147,16 +148,14 @@ class ApproveReviewCandidate:
 
     async def execute(self, candidate_id: int) -> Term:
         """Approve and publish the candidate's term. Raises ValueError if
-        the candidate doesn't exist or isn't pending."""
+        the candidate doesn't exist, or ReviewCandidateNotPending if it's
+        already been approved or rejected."""
         async with self.uow:
             candidate = await self.uow.review_queue.by_id(candidate_id)
             if candidate is None:
                 raise ValueError(f"Review candidate not found: {candidate_id}")
             if candidate.status != ReviewStatus.PENDING:
-                raise ValueError(
-                    f"Review candidate {candidate_id} is not pending "
-                    f"(status: {candidate.status.value})"
-                )
+                raise ReviewCandidateNotPending(candidate_id, candidate.status)
             await self.uow.terms.upsert(candidate.term)
             await self.uow.review_queue.set_status(candidate_id, ReviewStatus.APPROVED)
             await self.uow.events.publish(
@@ -172,14 +171,13 @@ class RejectReviewCandidate:
         self.uow = uow
 
     async def execute(self, candidate_id: int) -> None:
-        """Raises ValueError if the candidate doesn't exist or isn't pending."""
+        """Raises ValueError if the candidate doesn't exist, or
+        ReviewCandidateNotPending if it's already been approved or
+        rejected."""
         async with self.uow:
             candidate = await self.uow.review_queue.by_id(candidate_id)
             if candidate is None:
                 raise ValueError(f"Review candidate not found: {candidate_id}")
             if candidate.status != ReviewStatus.PENDING:
-                raise ValueError(
-                    f"Review candidate {candidate_id} is not pending "
-                    f"(status: {candidate.status.value})"
-                )
+                raise ReviewCandidateNotPending(candidate_id, candidate.status)
             await self.uow.review_queue.set_status(candidate_id, ReviewStatus.REJECTED)

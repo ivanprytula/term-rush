@@ -153,6 +153,20 @@ class ReviewQueueListResponse(BaseModel):
 ReviewStatusQuery = Annotated[ReviewStatus, Query()]
 
 
+class ReviewCandidateConflictResponse(BaseModel):
+    """A 409: the candidate exists but isn't in the state the requested
+    transition requires. Carries the actual current status as a typed
+    field, not just prose, so a client can branch on it (e.g. show
+    "already approved" vs "already rejected") without parsing `error`.
+    """
+
+    error: str
+    status_code: int = 409
+    candidate_id: int
+    current_status: ReviewStatus
+    required_status: ReviewStatus = ReviewStatus.PENDING
+
+
 class ErrorResponse(BaseModel):
     """Error response body.
 

@@ -12,6 +12,7 @@ from fastapi import status
 
 from content_service.api.dependencies import get_unit_of_work
 from content_service.api.schemas import ErrorResponse
+from content_service.api.schemas import ReviewCandidateConflictResponse
 from content_service.api.schemas import ReviewCandidateResponse
 from content_service.api.schemas import ReviewQueueListResponse
 from content_service.api.schemas import ReviewStatusQuery
@@ -22,6 +23,7 @@ from content_service.application.use_cases import ApproveReviewCandidate
 from content_service.application.use_cases import ListReviewCandidates
 from content_service.application.use_cases import RejectReviewCandidate
 from content_service.application.use_cases import SubmitReviewCandidate
+from content_service.domain.review import ReviewCandidateNotPending
 from content_service.domain.review import ReviewStatus
 
 logger = logging.getLogger(__name__)
@@ -73,7 +75,10 @@ async def list_candidates(
     "/{candidate_id}/approve",
     response_model=TermResponse,
     status_code=status.HTTP_200_OK,
-    responses={404: {"model": ErrorResponse}},
+    responses={
+        404: {"model": ErrorResponse},
+        409: {"model": ReviewCandidateConflictResponse},
+    },
 )
 async def approve_candidate(
     candidate_id: CandidateIdPath,
@@ -84,7 +89,7 @@ async def approve_candidate(
     try:
         term = await use_case.execute(candidate_id)
         return TermResponse.from_term(term)
-    except ValueError as exc:
+    except (ValueError, ReviewCandidateNotPending) as exc:
         logger.warning(f"Review candidate approval failed: {exc}")
         raise exc
 
@@ -92,7 +97,10 @@ async def approve_candidate(
 @router.post(
     "/{candidate_id}/reject",
     status_code=status.HTTP_204_NO_CONTENT,
-    responses={404: {"model": ErrorResponse}},
+    responses={
+        404: {"model": ErrorResponse},
+        409: {"model": ReviewCandidateConflictResponse},
+    },
 )
 async def reject_candidate(
     candidate_id: CandidateIdPath,
@@ -102,6 +110,6 @@ async def reject_candidate(
     use_case = RejectReviewCandidate(uow)
     try:
         await use_case.execute(candidate_id)
-    except ValueError as exc:
+    except (ValueError, ReviewCandidateNotPending) as exc:
         logger.warning(f"Review candidate rejection failed: {exc}")
         raise exc

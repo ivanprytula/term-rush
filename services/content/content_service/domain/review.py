@@ -23,6 +23,19 @@ class ReviewStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class ReviewCandidateNotPending(Exception):
+    """Raised when approving or rejecting a candidate that isn't PENDING —
+    a conflict with the queue's current state, not a missing resource.
+    """
+
+    def __init__(self, candidate_id: int, status: ReviewStatus) -> None:
+        self.candidate_id = candidate_id
+        self.status = status
+        super().__init__(
+            f"Review candidate {candidate_id} is not pending (status: {status.value})"
+        )
+
+
 class ReviewCandidate(BaseModel):
     """One enriched, validated Term awaiting (or past) human review.
 
