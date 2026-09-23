@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
 import { Mic, MicOff } from "lucide-react";
 import {
   createRoundGameRoundsPost,
@@ -77,6 +78,24 @@ function getInitialSprintDuration(): SprintDuration {
     : 60;
 }
 
+// Shared trigger style for the top-right toggle row (settings, how-to-play)
+// so the two <summary> buttons stay visually identical by construction.
+const TOGGLE_TRIGGER_CLASS =
+  "list-none bg-surface border border-surface-border text-sm px-3 py-1.5 font-bold text-text hover:border-phosphor transition cursor-pointer";
+
+// Closes an open <details> when a click lands outside it — native <details>
+// has no built-in "click outside to close" behavior.
+function useCloseOnOutsideClick(ref: RefObject<HTMLDetailsElement | null>) {
+  useEffect(() => {
+    const handleClick = (event: MouseEvent) => {
+      const el = ref.current;
+      if (el?.open && !el.contains(event.target as Node)) el.open = false;
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [ref]);
+}
+
 function ThemeToggle({
   theme,
   onChange,
@@ -89,7 +108,7 @@ function ThemeToggle({
       value={theme}
       onChange={(e) => onChange(e.target.value as Theme)}
       aria-label="Switch theme"
-      className="text-xs text-text-muted hover:text-text border border-surface-border hover:border-phosphor px-2 py-1 transition bg-surface"
+      className="text-sm font-bold text-text-muted hover:text-text border border-surface-border hover:border-phosphor px-3 py-1.5 transition bg-surface"
     >
       {THEMES.map((t) => (
         <option key={t} value={t}>
@@ -113,12 +132,12 @@ function SettingsPanel({
   onVoiceLanguageChange: (language: VoiceLanguage) => void;
   onSprintDurationChange: (duration: SprintDuration) => void;
 }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  useCloseOnOutsideClick(detailsRef);
   return (
-    <details className="relative bg-surface border border-surface-border text-sm text-text-dim">
-      <summary className="cursor-pointer select-none px-3 py-1.5 font-bold text-text">
-        settings
-      </summary>
-      <div className="absolute left-0 mt-2 w-56 space-y-3 bg-surface border border-surface-border p-3">
+    <details ref={detailsRef} className="relative">
+      <summary className={TOGGLE_TRIGGER_CLASS}>settings</summary>
+      <div className="absolute right-0 top-full mt-2 w-64 space-y-3 bg-surface border border-surface-border text-sm text-text-dim p-3">
         <label className="flex items-center justify-between gap-3">
           voice language
           <select
@@ -127,7 +146,7 @@ function SettingsPanel({
               onVoiceLanguageChange(event.target.value as VoiceLanguage)
             }
             aria-label="Voice language"
-            className="bg-surface border border-surface-border text-text px-2 py-1"
+            className="w-36 bg-surface border border-surface-border text-text px-2 py-1"
           >
             <option value="en-US">English (US)</option>
             <option value="en-GB">English (UK)</option>
@@ -141,7 +160,7 @@ function SettingsPanel({
               onSprintDurationChange(Number(event.target.value) as SprintDuration)
             }
             aria-label="Sprint duration"
-            className="bg-surface border border-surface-border text-text px-2 py-1"
+            className="w-28 bg-surface border border-surface-border text-text px-2 py-1"
           >
             {sprintDurations.map((duration) => (
               <option key={duration} value={duration}>
@@ -375,12 +394,12 @@ function RoundSummary({
 
 // Condensed for in-app reading; full rules live in docs/game-rules.md.
 function HowToPlay() {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  useCloseOnOutsideClick(detailsRef);
   return (
-    <details className="fixed top-14 right-4 z-10 w-fit max-w-[calc(100vw-2rem)] bg-surface border border-surface-border text-sm text-text-dim open:pb-4">
-      <summary className="cursor-pointer select-none px-4 py-3 font-bold text-text">
-        $ man term-rush
-      </summary>
-      <div className="px-4 space-y-3">
+    <details ref={detailsRef} className="relative">
+      <summary className={TOGGLE_TRIGGER_CLASS}>$ man term-rush</summary>
+      <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] bg-surface border border-surface-border text-sm text-text-dim p-4 pb-4 space-y-3">
         <p>
           You're shown a term. Type what it means and submit — you're
           graded immediately, then move to the next term.
@@ -495,13 +514,9 @@ export default function App() {
   // rAF countdown below whenever a fresh round starts.
   const [serverRemaining, setServerRemaining] = useState<number | null>(null);
   const remainingSeconds = useSprintCountdown(serverRemaining);
-  const speech = useSpeechRecognition(voiceLanguage);
+  const speech = useSpeechRecognition(voiceLanguage, setAnswer);
   const answerInputRef = useRef<HTMLTextAreaElement>(null);
   const sprintExpired = roundMode === "sprint" && remainingSeconds === 0;
-
-  useEffect(() => {
-    if (speech.transcript) setAnswer(speech.transcript);
-  }, [speech.transcript]);
 
   useEffect(() => {
     const input = answerInputRef.current;
@@ -526,9 +541,15 @@ export default function App() {
     0,
   );
 
+  // Destructured so exhaustive-deps can track these exact reads — `speech`
+  // itself is a fresh object every render (isListening/transcript/error all
+  // live in its own state), so listing it whole would re-run these effects
+  // on every unrelated field change instead of just start/stop/isListening.
+  const { isListening, start: startListening, stop: stopListening } = speech;
+
   useEffect(() => {
-    if (!term || result || roundComplete) speech.stop();
-  }, [roundComplete, result, speech.stop, term]);
+    if (!term || result || roundComplete) stopListening();
+  }, [roundComplete, result, stopListening, term]);
 
   useEffect(() => {
     const handleVoiceShortcut = (event: KeyboardEvent) => {
@@ -541,18 +562,22 @@ export default function App() {
         return;
       }
       event.preventDefault();
-      speech.isListening ? speech.stop() : speech.start();
+      if (isListening) {
+        stopListening();
+      } else {
+        startListening();
+      }
     };
 
     window.addEventListener("keydown", handleVoiceShortcut);
     return () => window.removeEventListener("keydown", handleVoiceShortcut);
   }, [
+    isListening,
     loading,
     result,
     roundComplete,
-    speech.isListening,
-    speech.start,
-    speech.stop,
+    startListening,
+    stopListening,
     term,
   ]);
 
@@ -711,6 +736,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-ground text-text flex items-center justify-center p-4">
       <div className="fixed top-4 right-4 z-20 flex items-start gap-2">
+        <HowToPlay />
         <SettingsPanel
           voiceLanguage={voiceLanguage}
           sprintDuration={sprintDuration}
@@ -725,8 +751,6 @@ export default function App() {
           <span className="text-phosphor">~/</span>term-rush
           <span className="animate-pulse text-phosphor">_</span>
         </h1>
-
-        <HowToPlay />
 
         {/* Mode is fixed server-side at round creation — the picker only
             affects the round about to start, so it's shown before start

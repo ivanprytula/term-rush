@@ -16,6 +16,12 @@ export function useSprintCountdown(
   );
   const deadlineRef = useRef<number | null>(null);
 
+  // Deliberate sync-with-external-clock effect, not derived render state:
+  // deadlineRef anchors to performance.now() (impure, ref-mutating — both
+  // barred during render by react-hooks/purity and .../refs), so this
+  // can't be hoisted into render the way "adjusting state when a prop
+  // changes" normally would be.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (serverRemainingSeconds === null) {
       deadlineRef.current = null;
@@ -39,6 +45,7 @@ export function useSprintCountdown(
     // serverRemainingSeconds re-arms the countdown on every value it emits,
     // not just the first — a new round always carries a fresh one.
   }, [serverRemainingSeconds]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return remaining;
 }
