@@ -213,11 +213,40 @@ terminal state, one `RoundOver` exception, content predicates over a
 
 ---
 
+## Phase 3d — GraphQL BFF for the session screen
+
+**Tag:** Skills-practice. The session screen's three independent REST reads
+work fine at this scale — this phase demonstrates one query replacing
+several REST round-trips, a distinct skill from REST/gRPC (see
+[skills-map.md § API design](./skills-map.md#api-design-rest--grpc--graphql)).
+
+**Problem:** loading the session screen fired two independent mount-time
+reads (`GET /game-config`, `GET /terms/categories`), each with its own
+loading/error state to coordinate for what is conceptually one screen's
+data.
+
+**Decision:** a Strawberry GraphQL schema mounted inside `game-service`
+(not a separate deployable — see ADR-0010) exposing one `sessionScreen`
+query aggregating `gameConfig` and `termCategories`. Mutations
+(`POST /game-rounds`, answer submission) stay REST; `randomTerm` is part
+of the schema but unused by the client today, since the client's only
+term fetch happens inside round creation and needs `round_id` for
+exclusion — a parameter `sessionScreen`'s query doesn't take.
+
+**Shipped:** `game_service/api/graphql/` (schema, resolvers, GraphQL-owned
+`RoundMode` mirror matching REST's lowercase wire casing), mounted at
+`/graphql`. `services/web/src/sessionScreen.ts` — a hand-rolled `fetch`
+(no GraphQL client library; one query doesn't justify the dependency)
+replacing `App.tsx`'s two REST calls. REST `/game-config` and
+`/terms/categories` remain, unchanged, for other consumers.
+
+**ADRs:** [0010](./adr/0010-graphql-bff-for-session-screen.md) (BFF
+placement, query shape, REST-vs-GraphQL enum casing duplication)
+
+---
+
 ## Not yet started
 
-- **GraphQL BFF** — collapse the session screen's 3 REST round-trips into
-  one query + one mutation. Scoped, not built. See
-  [README § Next Steps](../README.md#next-steps).
 - **Phase 4 (cloud deploy)**, **Phase 5 (scaling narrative)** — see README;
   no ADRs yet because no decisions have been made yet.
 

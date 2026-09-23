@@ -175,7 +175,7 @@ run-all: up
     just seed-content
     just dev-all
 
-# Run the Vite dev server (proxies /game-rounds and /terms to dev on :8000).
+# Run the Vite dev server (proxies /game-rounds, /terms, /game-config, /graphql to dev on :8000).
 web port="5173":
     cd services/web && npm run dev -- --port {{port}}
 

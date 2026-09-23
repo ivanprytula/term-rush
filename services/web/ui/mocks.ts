@@ -20,11 +20,11 @@ export type GradeRule = (answer: string) => {
 const defaultGradeRule: GradeRule = () => ({ verdict: "correct", score: 30 });
 
 /**
- * Installs route mocks for the three endpoints App.tsx calls on its
- * non-streaming path: POST /game-rounds, GET /terms/random, POST
- * .../answers/submit. No real game-service/Postgres involved — this is a
- * frontend state-machine test, not a full-stack one (see
- * playwright.config.ts).
+ * Installs route mocks for every endpoint App.tsx calls: the sessionScreen
+ * GraphQL query, POST /game-rounds, GET /terms/random, POST
+ * .../answers/submit (and its /stream variant). No real
+ * game-service/Postgres involved — this is a frontend state-machine test,
+ * not a full-stack one (see playwright.config.ts).
  */
 export async function mockBackend(
   page: Page,
@@ -60,29 +60,39 @@ export async function mockBackend(
     duration_seconds?: number;
   } | null = null;
 
-  await page.route("**/game-config", async (route) => {
+  // App.tsx fetches gameConfig + termCategories through one sessionScreen
+  // GraphQL query (ADR-0010), not the REST /game-config and
+  // /terms/categories endpoints — mock that query instead of those routes.
+  await page.route("**/graphql", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        modes: [
-          { mode: "classic", max_answers: 200, timed: false, llm_grading: "optional" },
-          { mode: "sprint", timed: true, llm_grading: "disabled" },
-          { mode: "survival", timed: false, llm_grading: "optional" },
-          { mode: "boss", max_answers: 1, timed: false, llm_grading: "forced" },
-          { mode: "daily_20", max_answers: 20, timed: false, llm_grading: "disabled" },
-        ],
-        sprint: {
-          default_duration_seconds: 60,
-          min_duration_seconds: 10,
-          max_duration_seconds: 300,
-          duration_options_seconds: [10, 30, 60, 120, 300],
+        data: {
+          sessionScreen: {
+            gameConfig: {
+              modes: [
+                { mode: "classic", maxAnswers: 200, timed: false, llmGrading: "optional" },
+                { mode: "sprint", maxAnswers: null, timed: true, llmGrading: "disabled" },
+                { mode: "survival", maxAnswers: null, timed: false, llmGrading: "optional" },
+                { mode: "boss", maxAnswers: 1, timed: false, llmGrading: "forced" },
+                { mode: "daily_20", maxAnswers: 20, timed: false, llmGrading: "disabled" },
+              ],
+              sprint: {
+                defaultDurationSeconds: 60,
+                minDurationSeconds: 10,
+                maxDurationSeconds: 300,
+                durationOptionsSeconds: [10, 30, 60, 120, 300],
+              },
+              survivalLives: 3,
+              dailyTermCount: 20,
+              answerMaxLength: 512,
+              scoreMax: 100,
+              rubric: { concept: 40, expansion: 30, purpose: 20, example: 10 },
+            },
+            termCategories: categories,
+          },
         },
-        survival_lives: 3,
-        daily_term_count: 20,
-        answer_max_length: 512,
-        score_max: 100,
-        rubric: { concept: 40, expansion: 30, purpose: 20, example: 10 },
       }),
     });
   });
@@ -127,17 +137,6 @@ export async function mockBackend(
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(term),
-    });
-  });
-
-  // Empty by default: existing tests don't exercise the collection picker,
-  // and CategoryPicker renders nothing for an empty list — no dropdown to
-  // interact with, no change to existing test assertions.
-  await page.route("**/terms/categories", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ categories }),
     });
   });
 

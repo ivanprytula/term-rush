@@ -106,7 +106,8 @@ repeats resume (there's nothing else left to show).
 Theme, voice language, and Sprint duration are stored in the current browser's
 local storage. They are preferences, not player account data. Voice language
 offers English (US) and English (UK). Authoritative gameplay limits are served
-by `GET /game-config`.
+by `GET /game-config` (also available via the `gameConfig` field of the
+`sessionScreen` GraphQL query, which the client uses at page load).
 
 ## What's not here yet
 

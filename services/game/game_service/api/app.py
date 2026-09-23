@@ -11,6 +11,7 @@ from opentelemetry.baggage import set_baggage
 
 from game_service.api import dependencies
 from game_service.api.dependencies import _init_session_factory
+from game_service.api.graphql.schema import graphql_router
 from game_service.api.routers import answers
 from game_service.api.routers import config
 from game_service.api.routers import game_rounds
@@ -81,6 +82,7 @@ app.include_router(config.router)
 app.include_router(game_rounds.router)
 app.include_router(leaderboard.router)
 app.include_router(terms.router)
+app.include_router(graphql_router, prefix="/graphql")
 
 
 @app.get("/health")

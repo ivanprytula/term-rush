@@ -7,7 +7,9 @@ vehicle, not the deliverable. Scope and infrastructure choices are sized for tha
 (see [ADR-0001](./docs/adr/0001-record-architecture-decisions.md)), not for a
 minimal shipping product.
 
-**Status:** Phase 1–3a complete. Phase 3b in progress (Kafka event log done, GraphQL BFF pending).
+**Status:** Phase 1–3a complete. Phase 3b (Kafka event log, GraphQL BFF)
+complete. See [docs/roadmap.md](./docs/roadmap.md) for game modes (Phase
+3c) and every other shipped phase in full.
 
 ## Backend (Phase 1)
 
@@ -87,11 +89,13 @@ inventory.
 - ~~**Phase 3a:** Microservices split (content-service)~~ — done:
   content-service owns terms in its own Postgres, game-service resolves
   them over gRPC, verified end-to-end.
-- **Phase 3b:** Kafka event log, GraphQL BFF. Kafka done: `game-service`
+- ~~**Phase 3b:** Kafka event log, GraphQL BFF~~ — done: `game-service`
   publishes `AnswerGraded`, `content-service` publishes `TermPublished`,
   consumed in-process to invalidate the gRPC term cache. Consumer supervised
   for auto-restart on crash with backoff; `/ready` degrades when consumer is
-  unhealthy (see ADR-0011). GraphQL BFF not started.
+  unhealthy (see ADR-0011). GraphQL BFF: a `sessionScreen` query aggregates
+  `gameConfig` and `termCategories` into one round trip (ADR-0010),
+  mounted at `/graphql` alongside the existing REST routes.
 - **Phase 4:** GCP deployment (Cloud Run), AWS modules (reviewable), Kubernetes (local kind)
   — done when the app runs on a real cloud target, reachable over HTTPS.
 - **Phase 5:** Documentation and technical narrative

@@ -2,9 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff } from "lucide-react";
 import {
   createRoundGameRoundsPost,
-  getGameConfigGameConfigGet,
   getRandomTermTermsRandomGet,
-  getTermCategoriesTermsCategoriesGet,
   submitAnswerGameRoundsRoundIdAnswersSubmitPost,
 } from "./client";
 import type {
@@ -13,6 +11,7 @@ import type {
   SubmitAnswerResponse,
   TermPromptResponse,
 } from "./client";
+import { fetchSessionScreen } from "./sessionScreen";
 import { submitAnswerStream } from "./submitAnswerStream";
 import { useSprintCountdown } from "./useSprintCountdown";
 import { useSpeechRecognition } from "./useSpeechRecognition";
@@ -629,27 +628,20 @@ export default function App() {
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
+  // Once per mount, not per round: gameConfig and categories are both
+  // round-independent (ADR-0010's sessionScreen query; randomTerm is
+  // omitted here — it takes no round_id, so it can't replace loadTerm's
+  // per-round exclusion inside startRound). A failed fetch degrades
+  // silently: gameConfig falls back to the client-side constants already
+  // used below (SURVIVAL_LIVES, SPRINT_DURATIONS, ...), and an empty
+  // categories list just means no picker renders (CategoryPicker's
+  // empty-list guard) — "All terms" still works either way.
   useEffect(() => {
-    getGameConfigGameConfigGet()
-      .then(({ data }) => {
-        if (data) setGameConfig(data);
-      })
-      .catch(() => {});
-  }, []);
-
-  // Once per mount, not per round — the collection list doesn't change
-  // mid-session. A failed fetch just means no picker renders (CategoryPicker
-  // returns null on an empty list) rather than an error state; "All terms"
-  // still works with zero categories loaded.
-  useEffect(() => {
-    getTermCategoriesTermsCategoriesGet()
-      .then(({ data }) => {
-        if (data) setCategories(data.categories);
-      })
-      // A network failure here just means no picker renders (see
-      // CategoryPicker's empty-list guard) — "All terms" still works with
-      // zero categories loaded, so this never becomes a blocking error.
-      .catch(() => {});
+    fetchSessionScreen().then((result) => {
+      if (!result) return;
+      setGameConfig(result.gameConfig);
+      setCategories(result.categories);
+    });
   }, []);
 
   const finishGrading = (data: SubmitAnswerResponse) => {

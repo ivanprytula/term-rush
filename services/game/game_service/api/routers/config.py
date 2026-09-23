@@ -13,9 +13,12 @@ from game_service.domain.round import RoundMode
 router = APIRouter(prefix="/game-config", tags=["configuration"])
 
 
-@router.get("", response_model=GameConfigResponse, status_code=status.HTTP_200_OK)
-def get_game_config() -> GameConfigResponse:
-    """Return gameplay limits and capabilities for frontend clients."""
+def build_game_config() -> GameConfigResponse:
+    """Build gameplay limits and capabilities for frontend clients.
+
+    Shared by the REST endpoint and the GraphQL sessionScreen query
+    (ADR-0010) so the two surfaces can't drift on what "game config" means.
+    """
     return GameConfigResponse(
         modes=[
             GameModeConfigResponse(
@@ -64,3 +67,9 @@ def get_game_config() -> GameConfigResponse:
             example=constants.EXAMPLE_WEIGHT,
         ),
     )
+
+
+@router.get("", response_model=GameConfigResponse, status_code=status.HTTP_200_OK)
+def get_game_config() -> GameConfigResponse:
+    """Return gameplay limits and capabilities for frontend clients."""
+    return build_game_config()
