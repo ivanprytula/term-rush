@@ -48,7 +48,10 @@ function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null 
   return window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null;
 }
 
-export function useSpeechRecognition(language = "en-US") {
+export function useSpeechRecognition(
+  language = "en-US",
+  onTranscript?: (transcript: string) => void,
+) {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const shouldKeepListeningRef = useRef(false);
   const restartTimeoutRef = useRef<number | null>(null);
@@ -60,6 +63,12 @@ export function useSpeechRecognition(language = "en-US") {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Kept current without re-registering recognition.onresult on every
+  // caller re-render (onTranscript is typically an inline callback).
+  const onTranscriptRef = useRef(onTranscript);
+  useEffect(() => {
+    onTranscriptRef.current = onTranscript;
+  }, [onTranscript]);
 
   useEffect(() => {
     if (recognitionRef.current) recognitionRef.current.lang = language;
@@ -118,9 +127,10 @@ export function useSpeechRecognition(language = "en-US") {
           }
         }
         interimTranscriptRef.current = nextInterimTranscript;
-        setTranscript(
-          `${finalTranscriptRef.current}${interimTranscriptRef.current}`.trim(),
-        );
+        const nextTranscript =
+          `${finalTranscriptRef.current}${interimTranscriptRef.current}`.trim();
+        setTranscript(nextTranscript);
+        if (nextTranscript) onTranscriptRef.current?.(nextTranscript);
       };
       recognitionRef.current = recognition;
     }
