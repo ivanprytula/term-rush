@@ -13,6 +13,9 @@ __pycache__/
 coverage/
 .coverage
 
+# Dagster local runtime state (run history, event log, materialized assets)
+.dagster_home/
+
 # Node
 node_modules/
 dist/
