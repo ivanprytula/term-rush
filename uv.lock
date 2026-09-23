@@ -1711,7 +1711,9 @@ name = "pipeline-service"
 version = "0.1.0"
 source = { virtual = "services/pipeline" }
 dependencies = [
+    { name = "anthropic" },
     { name = "dagster" },
+    { name = "httpx" },
     { name = "packaging" },
     { name = "pydantic" },
     { name = "tomlkit" },
@@ -1727,7 +1729,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", specifier = ">=0.69" },
     { name = "dagster", specifier = ">=1.9" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "packaging", specifier = ">=24.2" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "tomlkit", specifier = ">=0.13" },

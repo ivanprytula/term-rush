@@ -9,6 +9,8 @@ dependencies = [
   "pydantic>=2.9",
   "tomlkit>=0.13",
   "packaging>=24.2",
+  "anthropic>=0.69",
+  "httpx>=0.27",
 ]
 
 [dependency-groups]
