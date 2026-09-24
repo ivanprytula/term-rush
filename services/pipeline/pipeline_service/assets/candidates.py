@@ -12,6 +12,10 @@ import dagster as dg
 from dagster import AssetExecutionContext
 
 from pipeline_service.candidate import TermCandidate
+from pipeline_service.config import settings
+from pipeline_service.document_ingestion.extractors.document_ocr import (
+    extract_document_sources,
+)
 from pipeline_service.extractors.adr_headings import extract_adr_headings
 from pipeline_service.extractors.class_names import extract_class_names
 from pipeline_service.extractors.dependency_manifest import extract_dependency_manifests
@@ -90,6 +94,37 @@ def class_name_candidates(
     vocabulary).
     """
     candidates = extract_class_names(REPO_ROOT)
+
+    context.add_output_metadata(
+        {
+            "candidate_count": len(candidates),
+            "preview": dg.MetadataValue.md(
+                "\n".join(f"- `{c.name}`" for c in candidates[:20])
+            ),
+        }
+    )
+    context.log.info("Extracted %d candidates", len(candidates))
+
+    return candidates
+
+
+@dg.asset(
+    group_name="extract",
+    description="Candidate terms parsed from capitalized tokens in intake documents.",
+    dagster_type=dg.Any,  # type: ignore  # variadic tuple; see above
+)
+def document_ocr_candidates(
+    context: AssetExecutionContext,
+) -> tuple[TermCandidate, ...]:
+    """Extract stage for the document/OCR source (ADR-0018, Low-confidence
+    source: free text has no backtick/identifier convention, shape alone
+    can't distinguish a real term from an ordinary capitalized word).
+
+    Secondary consumer of document ingestion - the primary output of the
+    same intake directory is the chunked RAG corpus
+    (document_ingestion.assets), a separate asset chain in this graph.
+    """
+    candidates = extract_document_sources(Path(settings.DOCUMENT_INTAKE_DIR))
 
     context.add_output_metadata(
         {
