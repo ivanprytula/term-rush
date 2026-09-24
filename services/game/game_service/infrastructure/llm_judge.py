@@ -15,6 +15,7 @@ the full threat model and defense layering.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 
 from anthropic import AsyncAnthropic
@@ -26,6 +27,15 @@ from game_service.domain.term import Term
 
 MODEL = "claude-haiku-4-5-20251001"
 MAX_TOKENS = 512
+# judge() is one request/response — bounded directly. stream_rationale() is
+# a live token stream with no natural per-chunk bound, so this instead caps
+# its total duration: a stream that never finishes is the same hang either
+# call could produce, just shaped differently. Both raise the stdlib
+# TimeoutError (an Exception, not BaseException) on expiry, so the existing
+# except Exception fallback in use_cases.py's _try_llm_grade/_stream_and_grade
+# catches it the same way as any other provider failure — see
+# LLMJudgePort's docstring ("raises on provider failure or timeout").
+LLM_TIMEOUT_SECONDS = 15.0
 
 SYSTEM_PROMPT = (
     "You are a strict grading rubric judge for a technical flashcard game. "
@@ -119,14 +129,15 @@ class AnthropicJudgePort:
         self._client = client
 
     async def judge(self, answer: str, term: Term) -> LLMJudgment:
-        response = await self._client.messages.create(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            system=SYSTEM_PROMPT,
-            tools=[RUBRIC_TOOL],
-            tool_choice={"type": "tool", "name": "submit_rubric_judgment"},
-            messages=[{"role": "user", "content": _user_message(answer, term)}],
-        )
+        async with asyncio.timeout(LLM_TIMEOUT_SECONDS):
+            response = await self._client.messages.create(
+                model=MODEL,
+                max_tokens=MAX_TOKENS,
+                system=SYSTEM_PROMPT,
+                tools=[RUBRIC_TOOL],
+                tool_choice={"type": "tool", "name": "submit_rubric_judgment"},
+                messages=[{"role": "user", "content": _user_message(answer, term)}],
+            )
 
         tool_use = next(block for block in response.content if block.type == "tool_use")
         raw = tool_use.input
@@ -140,11 +151,14 @@ class AnthropicJudgePort:
         )
 
     async def stream_rationale(self, answer: str, term: Term) -> AsyncIterator[str]:
-        async with self._client.messages.stream(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            system=RATIONALE_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": _user_message(answer, term)}],
-        ) as stream:
+        async with (
+            asyncio.timeout(LLM_TIMEOUT_SECONDS),
+            self._client.messages.stream(
+                model=MODEL,
+                max_tokens=MAX_TOKENS,
+                system=RATIONALE_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": _user_message(answer, term)}],
+            ) as stream,
+        ):
             async for text in stream.text_stream:
                 yield text
