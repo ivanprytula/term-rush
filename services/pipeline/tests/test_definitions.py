@@ -16,6 +16,7 @@ import pytest
 from pipeline_service.assets.candidates import adr_heading_candidates
 from pipeline_service.assets.candidates import class_name_candidates
 from pipeline_service.assets.candidates import dependency_manifest_candidates
+from pipeline_service.assets.candidates import document_ocr_candidates
 from pipeline_service.assets.enriched import enriched_candidates
 from pipeline_service.assets.loaded import loaded_candidates
 from pipeline_service.assets.validated import validated_candidates
@@ -36,6 +37,7 @@ def test_definitions_resolve_every_asset() -> None:
         "dependency_manifest_candidates",
         "adr_heading_candidates",
         "class_name_candidates",
+        "document_ocr_candidates",
         "enriched_candidates",
         "validated_candidates",
         "loaded_candidates",
@@ -72,12 +74,31 @@ def test_class_name_asset_materializes_real_candidates() -> None:
     assert all(isinstance(c, TermCandidate) for c in candidates)
 
 
+def test_document_ocr_asset_materializes_against_the_configured_intake_dir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No fixture PDFs live in the repo's real intake dir, so this proves
+    the asset reads settings.DOCUMENT_INTAKE_DIR and returns cleanly on an
+    empty/missing directory, same as extract_document_sources itself.
+    """
+    monkeypatch.setattr(
+        "pipeline_service.assets.candidates.settings.DOCUMENT_INTAKE_DIR",
+        "no/such/directory",
+    )
+
+    result = dg.materialize([document_ocr_candidates])
+
+    assert result.success
+    assert result.output_for_node("document_ocr_candidates") == ()
+
+
 def _materialize_enrich_dedup(
     monkeypatch: pytest.MonkeyPatch,
     manifest_candidates: tuple[TermCandidate, ...],
     adr_candidates: tuple[TermCandidate, ...],
     class_candidates: tuple[TermCandidate, ...] = (),
     curated_pairs: tuple[tuple[EnrichedTerm, TermCandidate], ...] = (),
+    document_ocr_candidates: tuple[TermCandidate, ...] = (),
 ) -> tuple[list[TermCandidate], tuple[tuple[EnrichedTerm, TermCandidate], ...]]:
     """Materialize enriched_candidates against fake upstream assets and a
     stubbed curated-source loader (defaults to empty, so these tests
@@ -97,6 +118,10 @@ def _materialize_enrich_dedup(
     @dg.asset(dagster_type=dg.Any, name="class_name_candidates")  # type: ignore
     def fake_class_candidates() -> tuple[TermCandidate, ...]:
         return class_candidates
+
+    @dg.asset(dagster_type=dg.Any, name="document_ocr_candidates")  # type: ignore
+    def fake_document_ocr_candidates() -> tuple[TermCandidate, ...]:
+        return document_ocr_candidates
 
     enrich_calls: list[TermCandidate] = []
 
@@ -121,6 +146,7 @@ def _materialize_enrich_dedup(
             fake_manifest_candidates,
             fake_adr_candidates,
             fake_class_candidates,
+            fake_document_ocr_candidates,
             enriched_candidates,
         ]
     )
@@ -204,6 +230,58 @@ def test_enrich_asset_includes_the_class_name_source(
     enrich_calls, _ = _materialize_enrich_dedup(monkeypatch, (), (), (class_candidate,))
 
     assert enrich_calls == [class_candidate]
+
+
+def test_enrich_asset_includes_the_document_ocr_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A candidate that only the document/OCR source yields must still
+    reach enrich - proves document_ocr_candidates is actually wired into
+    the merge, not just declared as an unused asset dependency.
+    """
+    ocr_candidate = TermCandidate(
+        name="Deprecation",
+        source_type=SourceType.DOCUMENT_OCR,
+        source_file="contract.pdf",
+        confidence=Confidence.LOW,
+    )
+
+    enrich_calls, _ = _materialize_enrich_dedup(
+        monkeypatch, (), (), (), document_ocr_candidates=(ocr_candidate,)
+    )
+
+    assert enrich_calls == [ocr_candidate]
+
+
+def test_enrich_asset_dedup_document_ocr_loses_to_higher_confidence_duplicate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DOCUMENT_OCR is LOW confidence - a term named by both OCR and a
+    higher-confidence source enriches once, keeping the higher-confidence
+    candidate, same precedence every other source already respects.
+    """
+    ocr_candidate = TermCandidate(
+        name="fastapi",
+        source_type=SourceType.DOCUMENT_OCR,
+        source_file="contract.pdf",
+        confidence=Confidence.LOW,
+    )
+    manifest_candidate = TermCandidate(
+        name="FastAPI",
+        source_type=SourceType.DEPENDENCY_MANIFEST,
+        source_file="pyproject.toml",
+        confidence=Confidence.HIGH,
+    )
+
+    enrich_calls, _ = _materialize_enrich_dedup(
+        monkeypatch,
+        (manifest_candidate,),
+        (),
+        (),
+        document_ocr_candidates=(ocr_candidate,),
+    )
+
+    assert enrich_calls == [manifest_candidate]
 
 
 def test_enrich_asset_dedup_spans_all_three_sources(
