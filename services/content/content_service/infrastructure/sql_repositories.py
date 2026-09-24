@@ -9,11 +9,14 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from content_service.application.ports import DocumentChunkRepository
 from content_service.application.ports import ReviewQueueRepository
 from content_service.application.ports import TermRepository
+from content_service.domain.document_chunk import DocumentChunk
 from content_service.domain.review import ReviewCandidate
 from content_service.domain.review import ReviewStatus
 from content_service.domain.term import Term
+from content_service.infrastructure.database import DocumentChunkModel
 from content_service.infrastructure.database import ReviewCandidateModel
 from content_service.infrastructure.database import TermAliasModel
 from content_service.infrastructure.database import TermCategoryModel
@@ -250,3 +253,53 @@ class SQLReviewQueueRepository(ReviewQueueRepository):
         if model is None:
             return
         model.status = status.value
+
+
+def _chunk_to_domain(model: DocumentChunkModel) -> DocumentChunk:
+    return DocumentChunk(
+        id=model.id,
+        text=model.text,
+        source_file=model.source_file,
+        chunk_index=model.chunk_index,
+        char_start=model.char_start,
+        char_end=model.char_end,
+    )
+
+
+class SQLDocumentChunkRepository(DocumentChunkRepository):
+    """Query and persist document chunks in PostgreSQL."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def add_batch(
+        self, chunks: tuple[DocumentChunk, ...]
+    ) -> tuple[DocumentChunk, ...]:
+        models = [
+            DocumentChunkModel(
+                text=chunk.text,
+                source_file=chunk.source_file,
+                chunk_index=chunk.chunk_index,
+                char_start=chunk.char_start,
+                char_end=chunk.char_end,
+            )
+            for chunk in chunks
+        ]
+        self.session.add_all(models)
+        await self.session.flush()  # assigns model.id via the DB sequence
+        return tuple(_chunk_to_domain(m) for m in models)
+
+    async def by_source_file(self, source_file: str) -> tuple[DocumentChunk, ...]:
+        stmt = (
+            select(DocumentChunkModel)
+            .where(DocumentChunkModel.source_file == source_file)
+            .order_by(DocumentChunkModel.chunk_index)
+        )
+        result = await self.session.execute(stmt)
+        return tuple(_chunk_to_domain(m) for m in result.scalars().all())
+
+    async def delete_by_source_file(self, source_file: str) -> None:
+        stmt = delete(DocumentChunkModel).where(
+            DocumentChunkModel.source_file == source_file
+        )
+        await self.session.execute(stmt)

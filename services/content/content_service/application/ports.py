@@ -9,6 +9,7 @@ from __future__ import annotations
 from abc import ABC
 from abc import abstractmethod
 
+from content_service.domain.document_chunk import DocumentChunk
 from content_service.domain.review import ReviewCandidate
 from content_service.domain.review import ReviewStatus
 from content_service.domain.term import Term
@@ -83,6 +84,24 @@ class ReviewQueueRepository(ABC):
         callers check existence via by_id first when they need to know."""
 
 
+class DocumentChunkRepository(ABC):
+    """Persist document chunks: the RAG/analytics corpus (ADR-0018)."""
+
+    @abstractmethod
+    async def add_batch(
+        self, chunks: tuple[DocumentChunk, ...]
+    ) -> tuple[DocumentChunk, ...]:
+        """Insert every chunk. Returns them with assigned ids, same order."""
+
+    @abstractmethod
+    async def by_source_file(self, source_file: str) -> tuple[DocumentChunk, ...]:
+        """Every chunk from one source document, in chunk_index order."""
+
+    @abstractmethod
+    async def delete_by_source_file(self, source_file: str) -> None:
+        """Remove every chunk from one source document. No-op if none exist."""
+
+
 class EventPublisher(ABC):
     """Publish domain events for external consumption."""
 
@@ -104,6 +123,7 @@ class UnitOfWork(ABC):
 
     terms: TermRepository
     review_queue: ReviewQueueRepository
+    document_chunks: DocumentChunkRepository
     events: EventPublisher
 
     @abstractmethod

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from content_service.application.ports import EventPublisher
 from content_service.application.ports import UnitOfWork
 from content_service.infrastructure.memory import InMemoryEventPublisher
+from content_service.infrastructure.sql_repositories import SQLDocumentChunkRepository
 from content_service.infrastructure.sql_repositories import SQLReviewQueueRepository
 from content_service.infrastructure.sql_repositories import SQLTermRepository
 
@@ -24,6 +25,7 @@ class SQLUnitOfWork(UnitOfWork):
         self.session = session
         self.terms = SQLTermRepository(session)
         self.review_queue = SQLReviewQueueRepository(session)
+        self.document_chunks = SQLDocumentChunkRepository(session)
         self.events = events if events is not None else InMemoryEventPublisher()
         self._in_transaction = False
 

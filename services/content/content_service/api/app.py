@@ -12,6 +12,7 @@ from content_service.api.config import settings
 from content_service.api.dependencies import _init_session_factory
 from content_service.api.dependencies import get_unit_of_work
 from content_service.api.grpc.server import serve as serve_grpc
+from content_service.api.routers import document_chunks
 from content_service.api.routers import review_queue
 from content_service.api.routers import terms
 from content_service.api.schemas import ReviewCandidateConflictResponse
@@ -54,6 +55,7 @@ app = FastAPI(title="Term Rush — content service", lifespan=lifespan)
 
 app.include_router(terms.router)
 app.include_router(review_queue.router)
+app.include_router(document_chunks.router)
 
 
 @app.get("/health")

@@ -205,6 +205,31 @@ class ReviewCandidateModel(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
 
 
+class DocumentChunkModel(Base):
+    """One persisted chunk of a document's text (ADR-0018 Slice 1: the
+    RAG/analytics corpus, no embeddings yet).
+    """
+
+    __tablename__ = "document_chunks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    text: Mapped[str] = mapped_column(
+        String(constants.DOCUMENT_CHUNK_MAX_LEN), nullable=False
+    )
+    source_file: Mapped[str] = mapped_column(
+        String(constants.DOCUMENT_CHUNK_SOURCE_FILE_MAX_LEN), nullable=False
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    char_start: Mapped[int] = mapped_column(Integer, nullable=False)
+    char_end: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source_file", "chunk_index", name="uq_document_chunks_source_file_index"
+        ),
+    )
+
+
 async def create_db_engine(database_url: str) -> tuple[Any, Any]:
     """Create async engine and session factory.
 

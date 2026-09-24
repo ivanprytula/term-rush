@@ -6,6 +6,7 @@ Pure business logic over ports; independent of Framework/Infrastructure.
 from __future__ import annotations
 
 from content_service.application.ports import UnitOfWork
+from content_service.domain.document_chunk import DocumentChunk
 from content_service.domain.review import ReviewCandidate
 from content_service.domain.review import ReviewCandidateNotPending
 from content_service.domain.review import ReviewStatus
@@ -98,6 +99,45 @@ class PublishTerm:
             await self.uow.terms.upsert(term)
             await self.uow.events.publish("TermPublished", {"term_id": term.id})
             return term
+
+
+class IngestDocumentChunks:
+    """Persist a batch of chunked document text (ADR-0018 Slice 1: the RAG
+    corpus, no embeddings yet).
+
+    Replace semantics per source file: re-ingesting a document (a pipeline
+    retry, or a re-chunk after tuning chunk size) deletes that document's
+    existing chunks first, so it can't conflict with the
+    (source_file, chunk_index) unique constraint. A document's chunk set
+    is fully superseded, not merged chunk-by-chunk.
+
+    No review gate — unlike terms, chunks are raw ingested text, not
+    LLM-authored knowledge published to players. The review gate exists to
+    protect what the game teaches, which doesn't apply here.
+    """
+
+    def __init__(self, uow: UnitOfWork) -> None:
+        self.uow = uow
+
+    async def execute(
+        self, chunks: tuple[DocumentChunk, ...]
+    ) -> tuple[DocumentChunk, ...]:
+        source_files = {chunk.source_file for chunk in chunks}
+        async with self.uow:
+            for source_file in source_files:
+                await self.uow.document_chunks.delete_by_source_file(source_file)
+            return await self.uow.document_chunks.add_batch(chunks)
+
+
+class ListDocumentChunksBySource:
+    """List every chunk ingested from one source document, in order."""
+
+    def __init__(self, uow: UnitOfWork) -> None:
+        self.uow = uow
+
+    async def execute(self, source_file: str) -> tuple[DocumentChunk, ...]:
+        async with self.uow:
+            return await self.uow.document_chunks.by_source_file(source_file)
 
 
 class SubmitReviewCandidate:
