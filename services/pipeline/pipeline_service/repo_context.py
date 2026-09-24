@@ -3,10 +3,9 @@ this repo, so the LLM drafts an example that cites this codebase instead
 of inventing a generic one.
 
 Deliberately not RAG (no embeddings, no vector search) — proportional to
-today's scale (a few dozen candidates, ADR-0012's own stated threshold
-for when a JSON-blob-style shortcut needs to become something real).
-Real RAG is a separate, larger increment (pgvector, already on the
-roadmap) once repo-mined vocabulary and corpus size justify it.
+today's scale (a few dozen candidates). ADR-0012 covers pgvector for the
+document-ingestion corpus, which reached embeddable scale/shape; this
+term-candidate corpus hasn't and stays on grep grounding until it does.
 
 Kept deliberately small: a dependency-manifest candidate (fastapi, httpx,
 sqlalchemy, ...) is a well-known public package the model already knows
