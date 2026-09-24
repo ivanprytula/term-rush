@@ -88,6 +88,72 @@ services:
     cap_drop:
       - ALL
 
+  pipeline:
+    build:
+      context: .
+      dockerfile: services/game/Dockerfile
+    command: ["python", "-m", "dagster", "dev", "-m", "pipeline_service.definitions"]
+    ports:
+      - "3000:3000"
+    environment:
+      PYTHONPATH: /app/services/pipeline
+      DAGSTER_HOME: /app/.dagster_home
+      CONTENT_SERVICE_URL: http://content:8001
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    depends_on:
+      content:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - .dagster_home:/app/.dagster_home
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    profiles:
+      - pipeline
+
+  seed-content:
+    build:
+      context: .
+      dockerfile: services/game/Dockerfile
+    command: ["python", "services/content/content_service/bin/run.py"]
+    environment:
+      PROCESS_TYPE: seed
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres-content:5432/term_rush_content
+    depends_on:
+      postgres-content:
+        condition: service_healthy
+    restart: "no"
+    profiles:
+      - tools
+
+  web:
+    build:
+      context: services/web
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE: http://localhost:8000
+    depends_on:
+      game:
+        condition: service_healthy
+    volumes:
+      - ./services/web/src:/app/src
+      - ./services/web/public:/app/public
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    profiles:
+      - dev
+
   postgres:
     image: postgres:17-alpine
     environment:

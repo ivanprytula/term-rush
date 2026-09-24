@@ -104,7 +104,7 @@ clean:
 
 # === Running Services & Containers ===
 
-# Start postgres, postgres-content, redis, and redpanda for local development.
+# Start infrastructure (postgres, postgres-content, redis, redpanda).
 up:
     docker compose up -d --wait postgres postgres-content redis redpanda
     @echo "postgres: localhost:5432"
@@ -112,9 +112,103 @@ up:
     @echo "redis: localhost:6379"
     @echo "redpanda: localhost:9092"
 
-# Stop postgres, postgres-content, redis, and redpanda.
+# Stop all containers, keep volumes (DB state preserved).
+down-soft:
+    docker compose stop
+
+# Stop all containers and remove volumes (full cleanup).
 down:
-    docker compose down
+    docker compose down -v
+
+# Hot-reload stack: native Python with auto-reload on file changes.
+# Game and content run in foreground via FastAPI. Infra runs in background.
+# Ctrl-C stops all. Toggle pipeline and web by commenting lines below.
+dev: up
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'kill 0' EXIT
+
+    # Migrations
+    export PYTHONPATH=services/content
+    export PROCESS_TYPE=migrate
+    export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/term_rush_content
+    uv run python services/content/content_service/bin/run.py
+
+    export PYTHONPATH=services/game
+    export PROCESS_TYPE=migrate
+    export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/term_rush
+    uv run python services/game/game_service/bin/run.py
+
+    export PYTHONPATH=services/content
+    export PROCESS_TYPE=seed
+    export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/term_rush_content
+    uv run python services/content/content_service/bin/run.py
+
+    @echo ""
+    @echo "Starting services (Ctrl-C to stop all)..."
+    @echo ""
+
+    # Start infra in background
+    docker compose up -d postgres-content redis
+
+    # TOGGLE: Uncomment to start pipeline (Dagster :3000)
+    # docker compose up -d --profile pipeline pipeline &
+
+    # TOGGLE: Uncomment to start web (Vite :5173)
+    # docker compose up -d --profile dev web &
+
+    # Start content-service in background
+    export PYTHONPATH=services/content
+    export PROCESS_TYPE=api
+    export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/term_rush_content
+    export ENVIRONMENT=development
+    uv run python services/content/content_service/bin/run.py &
+    sleep 2
+
+    # Start game-service in foreground (blocks here)
+    export PYTHONPATH=services/game
+    export PROCESS_TYPE=api
+    export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/term_rush
+    export REDIS_URL=redis://localhost:6379/0
+    export CONTENT_SERVICE_GRPC_URL=localhost:50051
+    export ENVIRONMENT=development
+    uv run python services/game/game_service/bin/run.py
+
+# Containerized stack: all services in Docker with auto-migrations.
+# Runs in background. Use `just down-soft` to stop. Toggle pipeline and web by commenting lines below.
+docker-stack: up
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    docker compose build game content
+    docker compose run --rm migrate
+    docker compose run --rm migrate-content
+    docker compose run --rm seed-content
+    docker compose up -d game content
+
+    # TOGGLE: Uncomment to start pipeline (Dagster :3000)
+    # docker compose up -d --profile pipeline pipeline
+
+    # TOGGLE: Uncomment to start web (Vite :5173)
+    # docker compose up --profile dev web
+
+    @echo ""
+    @echo "✓ Infrastructure ready"
+    @echo "  postgres: localhost:5432"
+    @echo "  postgres-content: localhost:5433"
+    @echo "  redis: localhost:6379"
+    @echo "  redpanda: localhost:9092"
+    @echo ""
+    @echo "✓ Services ready"
+    @echo "  game: localhost:8000/docs"
+    @echo "  content: localhost:8001/docs"
+    @echo ""
+    @echo "OPTIONAL (uncomment in Justfile):"
+    @echo "  - pipeline (Dagster): localhost:3000/asset_graph"
+    @echo "  - web (Vite): localhost:5173"
+    @echo ""
+    @echo "View logs: docker compose logs -f"
+    @echo "Stop: just down-soft"
 
 # Run game-service database migrations.
 migrate:
@@ -148,44 +242,6 @@ pipeline-dev:
     mkdir -p "$DAGSTER_HOME"
     uv run dagster dev -m pipeline_service.definitions
 
-# Run game-service API with hot-reload (:8000; requires postgres + migrations + content-service running).
-dev:
-    #!/usr/bin/env bash
-    export PYTHONPATH=services/game
-    export PROCESS_TYPE=api
-    export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/term_rush
-    export REDIS_URL=redis://localhost:6379/0
-    export CONTENT_SERVICE_GRPC_URL=localhost:50051
-    export ENVIRONMENT=development
-    uv run python services/game/game_service/bin/run.py
-
-# Run content-service API with hot-reload (:8001 REST, :50051 gRPC; requires postgres-content + migrations).
-dev-content:
-    #!/usr/bin/env bash
-    export PYTHONPATH=services/content
-    export PROCESS_TYPE=api
-    export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/term_rush_content
-    export ENVIRONMENT=development
-    uv run python services/content/content_service/bin/run.py
-
-# Run content-service then game-service, both with hot-reload (content-service first: game-service's gRPC calls need it up).
-dev-all:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    trap 'kill 0' EXIT
-    just dev-content &
-    sleep 2
-    just dev
-
-# Full local stack from cold: infra containers (up), both services'
-# migrations, content-service seed data, then both APIs with hot-reload.
-# Ctrl-C stops the APIs; the containers from `up` keep running — `just down`
-# to stop those too.
-run-all: up
-    just migrate
-    just migrate-content
-    just seed-content
-    just dev-all
 
 # Run the Vite dev server (proxies /game-rounds, /terms, /game-config, /graphql to dev on :8000).
 web port="5173":
