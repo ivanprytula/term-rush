@@ -23,6 +23,7 @@ from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
 from game_service.domain.round import RoundMode
 from game_service.domain.round import SubmittedAnswer
+from game_service.domain.term import Difficulty
 from game_service.domain.term import Term
 from game_service.domain.term import TermFilter
 
@@ -367,10 +368,12 @@ class GetNextTerm:
         self,
         round_id: str | None = None,
         category: str | None = None,
+        difficulty: Difficulty | None = None,
     ) -> Term:
         """Return the next term, optionally scoped to a category (a
-        player-chosen collection: "python-keywords", "abbreviations", ...).
-        Raises ValueError if no term matches (empty bank, category has no
+        player-chosen collection: "python-keywords", "abbreviations", ...)
+        and/or a minimum difficulty floor. Raises ValueError if no term
+        matches (empty bank, category has no terms, difficulty floor has no
         terms, Boss Round with no boss-eligible term, or — Daily 20 — the
         round's snapshotted term set is exhausted, which should never
         happen since is_over already gates at the same cap).
@@ -379,10 +382,11 @@ class GetNextTerm:
         a round exists) still get a plain random term, unexcluded. A Boss
         round derives its filter from the round's own mode rather than a
         caller-supplied parameter — a client should never be able to ask
-        for a boss-eligible term in a Classic round, and this way GET
-        /terms/random needs no new query param for it. Daily 20 skips the
-        random draw entirely: it serves its round's term_ids in order,
-        indexed by how many answers already exist.
+        for a boss-eligible term in a Classic round, and Boss ignores any
+        difficulty a caller passes. Daily 20 skips the random draw
+        entirely: it serves its round's term_ids in order, indexed by how
+        many answers already exist, so difficulty is ignored there too —
+        the set is fixed at round creation.
         """
         async with self.uow:
             excluded_ids: frozenset[str] = frozenset()
@@ -392,8 +396,11 @@ class GetNextTerm:
                 round_ = await self.uow.rounds.by_id(round_id)
                 if round_ is not None:
                     excluded_ids = frozenset(a.term_id for a in round_.answers)
-                    if round_.mode is RoundMode.BOSS:
-                        term_filter = TermFilter.boss_eligible()
+
+            if round_ is not None and round_.mode is RoundMode.BOSS:
+                term_filter = TermFilter.boss_eligible()
+            elif difficulty is not None:
+                term_filter = TermFilter(min_difficulty=difficulty)
 
             if round_ is not None and round_.mode is RoundMode.DAILY_20:
                 assert round_.term_ids is not None  # set at creation
@@ -407,8 +414,10 @@ class GetNextTerm:
 
             term = await self.uow.terms.random(excluded_ids, category, term_filter)
             if term is None:
-                if term_filter is not None:
+                if round_ is not None and round_.mode is RoundMode.BOSS:
                     raise ValueError("No boss-eligible term available")
+                if difficulty is not None:
+                    raise ValueError("No term meets the requested difficulty")
                 raise ValueError("No terms available")
             return term
 

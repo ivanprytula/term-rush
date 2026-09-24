@@ -11,6 +11,7 @@ from fastapi import status
 from game_service.api.dependencies import get_term_stats_repository
 from game_service.api.dependencies import get_unit_of_work
 from game_service.api.schemas import CategoryQuery
+from game_service.api.schemas import DifficultyQuery
 from game_service.api.schemas import ErrorResponse
 from game_service.api.schemas import RoundIdQuery
 from game_service.api.schemas import TermCategoriesResponse
@@ -35,6 +36,7 @@ router = APIRouter(prefix="/terms", tags=["terms"])
 async def get_random_term(
     round_id: RoundIdQuery = None,
     category: CategoryQuery = None,
+    difficulty: DifficultyQuery = None,
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> TermPromptResponse:
     """Fetch a random term to present to the player.
@@ -42,11 +44,13 @@ async def get_random_term(
     round_id, if given, excludes terms already answered this round —
     avoids repeating a term mid-round where the bank allows it. category,
     if given, scopes the pick to a player-chosen collection (a category
-    slug from GET /terms/categories).
+    slug from GET /terms/categories). difficulty, if given, scopes the
+    pick to terms at or above that level; ignored for a Boss round, which
+    always demands a boss-eligible term regardless of what's passed here.
     """
     use_case = GetNextTerm(uow)
     try:
-        term = await use_case.execute(round_id, category)
+        term = await use_case.execute(round_id, category, difficulty)
         return TermPromptResponse.from_term(term)
     except ValueError as exc:
         logger.warning(f"Random term lookup failed: {exc}")

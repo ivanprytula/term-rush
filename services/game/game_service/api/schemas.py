@@ -20,6 +20,7 @@ from game_service.domain.outcome import StreamEvent
 from game_service.domain.outcome import StreamEventKind
 from game_service.domain.round import GameRound
 from game_service.domain.round import RoundMode
+from game_service.domain.term import Difficulty
 from game_service.domain.term import Term
 from game_service.domain.term_stats import TermStats
 
@@ -49,6 +50,11 @@ CategoryQuery = Annotated[
     str | None,
     Query(pattern=r"^[a-z][a-z0-9-]*$", max_length=constants.TERM_SLUG_MAX_LEN),
 ]
+
+# Optional: GET /terms/random works without one (no floor), but supplying a
+# difficulty scopes the pick to terms at or above it. Ignored for a Boss
+# round, which always derives its own filter from TermFilter.boss_eligible().
+DifficultyQuery = Annotated[Difficulty | None, Query()]
 
 
 class CreateRoundRequest(BaseModel):

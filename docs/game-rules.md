@@ -101,6 +101,12 @@ Each new term avoids ones you've already answered this session — no
 back-to-back repeats mid-round. Once every term in the bank has come up,
 repeats resume (there's nothing else left to show).
 
+A **difficulty** picker on the setup screen (next to collection and mode)
+lets you set a minimum floor — Trivial through Expert — sent as `GET
+/terms/random?difficulty=`. It's a floor, not an exact match: "Hard" means
+Hard-or-above. Boss Round ignores it: it always demands a boss-eligible
+term, regardless of what's picked.
+
 ## Browser settings
 
 Theme, voice language, and Sprint duration are stored in the current browser's
@@ -112,6 +118,5 @@ by `GET /game-config` (also available via the `gameConfig` field of the
 ## What's not here yet
 
 No streak score bonus, no login (so no per-player Daily 20 lock or persisted
-best-times), no falling-term arcade gameplay, no difficulty selection, and no
-spaced repetition — those are on the
-[roadmap](../README.md#next-steps).
+best-times), no falling-term arcade gameplay, and no spaced repetition —
+those are on the [roadmap](../README.md#next-steps).
