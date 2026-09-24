@@ -48,10 +48,11 @@ def test_validate_asset_rejects_a_term_that_fails_a_contract() -> None:
     bad_term = EnrichedTerm(
         id="bad",
         term="bad",
-        expansion="bad",  # same as term - fails validate_term
-        definitions=("A definition.",),
+        expansion="Bad Example",
+        definitions=("too short.",),  # < 40 chars, and Boss-eligible below
         categories=("theory",),
-        difficulty=2,
+        difficulty=4,
+        examples=("an example",),  # difficulty>=3 + examples = Boss-eligible
     )
     candidate = TermCandidate(
         name="bad",

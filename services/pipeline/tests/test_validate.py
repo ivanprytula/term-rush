@@ -34,17 +34,13 @@ def test_validate_term_passes_a_well_formed_term() -> None:
     assert outcome.errors == ()
 
 
-def test_validate_term_rejects_expansion_equal_to_term() -> None:
-    outcome = validate_term(_term(term="fastapi", expansion="fastapi"))
+def test_validate_term_allows_expansion_equal_to_term() -> None:
+    # A proper noun (dagster, FastAPI) has no acronym to expand - its own
+    # name IS the expansion. Surfaced live by a real enrich run against
+    # "dagster" (ADR-0004 Resolution, 2026-09-24).
+    outcome = validate_term(_term(term="dagster", expansion="dagster"))
 
-    assert not outcome.is_valid
-    assert any("differ from term" in e for e in outcome.errors)
-
-
-def test_validate_term_rejects_expansion_equal_to_term_case_insensitive() -> None:
-    outcome = validate_term(_term(term="FastAPI", expansion="fastapi"))
-
-    assert not outcome.is_valid
+    assert outcome.is_valid
 
 
 def test_validate_term_rejects_short_definition_when_boss_eligible() -> None:

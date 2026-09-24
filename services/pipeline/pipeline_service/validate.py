@@ -2,7 +2,9 @@
 it can reach load (ADR-0004). Pure functions — no LLM, no network.
 
 Contracts covered here:
-- expansion non-empty and differs from term
+- expansion non-empty (enforced by EnrichedTerm's own min_length, not
+  re-checked here — the "must differ from term" clause was dropped:
+  a proper noun like `dagster` has no acronym to expand, ADR-0004 Resolution)
 - at least one definition, >=40 chars for anything Boss-eligible
   (difficulty >= MODERATE and has examples)
 - no duplicate terms after normalization, within one batch
@@ -53,13 +55,12 @@ def _normalized(term_name: str) -> str:
 
 
 def validate_term(term: EnrichedTerm) -> ValidationOutcome:
-    """Per-term contracts: expansion/term distinctness and definition
-    length for anything Boss-eligible.
+    """Per-term contracts: definition length for anything Boss-eligible.
+
+    expansion non-empty is enforced by EnrichedTerm's own field
+    constraint, not re-checked here.
     """
     errors: list[str] = []
-
-    if term.expansion.strip().lower() == term.term.strip().lower():
-        errors.append(f"expansion must differ from term (both are {term.term!r})")
 
     primary_definition = term.definitions[0] if term.definitions else ""
     is_boss_eligible = term.difficulty >= BOSS_ELIGIBLE_MIN_DIFFICULTY and bool(
