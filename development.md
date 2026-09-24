@@ -51,17 +51,48 @@ just check         # quality + arch + test (full gate)
 - **Type checking:** `ty`
 - **Architecture:** `import-linter` (layering, domain isolation, service isolation contracts)
 
-## Running Services
+## Just Recipes Reference
 
-Start supporting services for local development:
+All tasks are managed via `just` (a command runner). Run `just --list` to see all recipes, or use this reference:
 
-```bash
-just up   # Start postgres and redis
-just down # Stop postgres and redis
-just migrate       # Run database migrations (requires postgres running)
-just dev           # Run API server with hot-reload (requires postgres + migrations)
-just smoke         # Full integration test: build image, start, probe /health and /ready
-```
+| Command | Purpose | Typical Workflow |
+| --- | --- | --- |
+| **Setup & Sync** | | |
+| `just sync` | Install workspace dependencies (uv sync) | Once, or after `pyproject.toml` changes |
+| **Quality & Verification** | | |
+| `just quality` | Ruff lint + format + type-check (ty) | Quick code review |
+| `just arch` | Verify import-linter contracts (layering, domain isolation) | Before commit |
+| `just check` | quality + arch + test (full CI gate) | Before commit |
+| `just precommit` | Run pre-commit hooks manually | Optional; hooks auto-run if `prek install` used |
+| **Testing** | | |
+| `just test [path]` | Run pytest (all tests or narrow by path) | Validate behavior |
+| `just coverage` | Run tests with coverage report (HTML + terminal) | Check coverage % |
+| **Running Services** | | |
+| `just up` | Start postgres, postgres-content, redis, redpanda (background) | Before `just dev` or `just docker-stack` |
+| `just dev` | Start game + content with hot-reload (native Python); infra in Docker | Daily development work |
+| `just docker-stack` | Build and run all services in Docker (production parity) | Test full stack in containers |
+| `just down-soft` | Stop all containers, keep DB volumes | Pause work, preserve DB state |
+| `just down` | Stop all containers, delete DB volumes (full reset) | Clean slate |
+| **Database Migrations** | | |
+| `just migrate` | Run Alembic migrations on game-service DB | After schema changes or initial setup |
+| `just migrate-content` | Run Alembic migrations on content-service DB | After content schema changes |
+| `just seed-content` | Populate content-service's term bank with test data | After migrate-content |
+| **Optional Services** | | |
+| `just pipeline-dev` | Start Dagster webserver for term ingestion pipeline (:3000) | Pipeline development (requires `PYTHONPATH=services/pipeline`) |
+| `just web [port]` | Start Vite dev server (default :5173; proxies to game-service :8000) | Frontend development |
+| `just generate-client` | Regenerate TypeScript client from game-service OpenAPI schema | After API changes |
+| `just web-test-ui` | Run Playwright browser UI tests (mocked backend) | Frontend integration tests |
+| **Protocol & Build** | | |
+| `just proto` | Regenerate gRPC stubs from term.proto (commit the result) | After editing `.proto` files |
+| `just smoke` | Build Docker image, start, probe /health and /ready, tear down | Verify image is runnable (mimics CI) |
+| **Utilities** | | |
+| `just shell` | Start Python REPL in game service's environment | Interactive debugging |
+| `just clean` | Remove `__pycache__`, `.cache`, coverage artifacts | Cleanup |
+| `just grpc-ui [addr]` | Start grpcui interactive browser for gRPC (default localhost:50051) | Debug gRPC calls |
+
+**Toggles (edit Justfile, uncomment lines marked `# TOGGLE:`):**
+- Pipeline: Dagster at :3000
+- Web: Vite at :5173
 
 The monolith image contains all workspace members. Service selection happens at runtime via `PROCESS_TYPE` env var (12-factor):
 
@@ -70,7 +101,7 @@ The monolith image contains all workspace members. Service selection happens at 
 
 See [ADR-0006](./docs/adr/0006-one-image-for-all-services.md) for the image strategy.
 
-### Database Migrations
+## Database Migrations
 
 Same binary runs everywhere; behavior determined by `PROCESS_TYPE` env var:
 
