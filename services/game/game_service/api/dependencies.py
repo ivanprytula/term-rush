@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -19,9 +18,6 @@ from game_service.domain.graders import AnswerEvaluator
 from game_service.domain.graders import build_deterministic_evaluator
 from game_service.domain.llm_grader import LLMRubricGrader
 from game_service.infrastructure.answer_graded_stats import TOPIC as ANSWER_TOPIC
-from game_service.infrastructure.answer_graded_stats import (
-    start_consumer_task as start_stats_consumer_task,
-)
 from game_service.infrastructure.database import create_db_engine
 from game_service.infrastructure.grpc_term_repository import GrpcTermRepository
 from game_service.infrastructure.kafka_event_publisher import KafkaEventPublisher
@@ -34,10 +30,12 @@ from game_service.infrastructure.sql_repositories import SQLTermStatsRepository
 from game_service.infrastructure.sql_uow import SQLUnitOfWork
 from game_service.infrastructure.term_cache_invalidator import TOPIC as TERM_TOPIC
 from game_service.infrastructure.term_cache_invalidator import ConsumerHealth
-from game_service.infrastructure.term_cache_invalidator import start_consumer_task
 
-# Session factory, engine, gRPC channel, Kafka producer, and Kafka consumer
-# task (created at app startup via lifespan)
+# Session factory, engine, gRPC channel, and Kafka producer/consumers
+# (created at app startup via lifespan). The consumers' supervisor tasks are
+# spawned and joined by lifespan itself (a TaskGroup around its yield), not
+# stored here — only the consumer objects and health trackers are shared
+# with request handlers (get_consumer_health, /ready).
 _session_factory: Any = None
 _engine: Any = None
 _grpc_channel: grpc.aio.Channel | None = None
@@ -45,10 +43,8 @@ _term_repository: GrpcTermRepository | None = None
 _kafka_producer: AIOKafkaProducer | None = None
 _event_publisher: EventPublisher | None = None
 _kafka_consumer: AIOKafkaConsumer | None = None
-_consumer_task: asyncio.Task[None] | None = None
 _consumer_health: ConsumerHealth | None = None
 _stats_consumer: AIOKafkaConsumer | None = None
-_stats_consumer_task: asyncio.Task[None] | None = None
 _stats_consumer_health: ConsumerHealth | None = None
 
 # None when ANTHROPIC_API_KEY is unset: get_llm_grader then returns None and
@@ -82,19 +78,24 @@ _in_memory_term_stats = InMemoryTermStatsRepository()
 
 async def _init_session_factory() -> None:
     """Initialize the session factory, engine, gRPC channel, Kafka producer, and
-    Kafka consumer (called from lifespan).
+    Kafka consumers (called from lifespan).
 
     No-ops when DATABASE_URL is unset: get_unit_of_work then falls back to
     the in-memory adapters, which is how tests run without a real database.
     KAFKA_BROKER_URL unset leaves _event_publisher None (SQLUnitOfWork falls
-    back to its own in-memory no-op publisher) and starts no consumer task.
-    The consumer shares _term_repository with request handlers — invalidating
-    a cache no request reads from would be a no-op (ADR-0011).
+    back to its own in-memory no-op publisher) and starts no consumers.
+    The term-cache consumer shares _term_repository with request handlers —
+    invalidating a cache no request reads from would be a no-op (ADR-0011).
+
+    Only starts each AIOKafkaConsumer and its ConsumerHealth; does not spawn
+    a supervisor task. lifespan spawns both supervisors into its own
+    TaskGroup once this returns, so the two tasks' lifetimes are scoped to
+    that one `async with` block instead of tracked as separate globals.
     """
     global _session_factory, _engine, _grpc_channel, _term_repository
-    global _kafka_producer, _event_publisher, _kafka_consumer, _consumer_task
+    global _kafka_producer, _event_publisher, _kafka_consumer
     global _consumer_health
-    global _stats_consumer, _stats_consumer_task, _stats_consumer_health
+    global _stats_consumer, _stats_consumer_health
     if settings.DATABASE_URL is None:
         return
     _engine, _session_factory = await create_db_engine(str(settings.DATABASE_URL))
@@ -112,9 +113,6 @@ async def _init_session_factory() -> None:
         )
         await _kafka_consumer.start()
         _consumer_health = ConsumerHealth()
-        _consumer_task = start_consumer_task(
-            _kafka_consumer, _term_repository, _consumer_health
-        )
 
         _stats_consumer = AIOKafkaConsumer(
             ANSWER_TOPIC,
@@ -123,9 +121,6 @@ async def _init_session_factory() -> None:
         )
         await _stats_consumer.start()
         _stats_consumer_health = ConsumerHealth()
-        _stats_consumer_task = start_stats_consumer_task(
-            _stats_consumer, _session_factory, _stats_consumer_health
-        )
 
 
 async def get_unit_of_work() -> AsyncGenerator[UnitOfWork]:
