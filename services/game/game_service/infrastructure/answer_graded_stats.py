@@ -10,7 +10,6 @@ AnswerGraded's first consumer.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import logging
 from collections.abc import Callable
@@ -27,6 +26,10 @@ logger = logging.getLogger(__name__)
 
 TOPIC = "answers.graded"
 RESTART_BACKOFF_SECONDS = 5.0
+# Bounds one message's session-open + record + commit — a hung DB call blocks
+# this consumer's whole async for otherwise, with no visible symptom besides
+# ConsumerHealth eventually going stale.
+MESSAGE_TIMEOUT_SECONDS = 5.0
 
 # Constructs a repository from a session. Defaults to the real SQL adapter;
 # tests pass a fake to exercise message-parsing/supervisor behavior without
@@ -55,9 +58,18 @@ async def consume_answer_graded(
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
             logger.warning("Malformed AnswerGraded message, skipping: %s", exc)
             continue
-        async with session_factory() as session:
-            await repository_factory(session).record(term_id, verdict)
-            await session.commit()
+        try:
+            async with asyncio.timeout(MESSAGE_TIMEOUT_SECONDS):
+                async with session_factory() as session:
+                    await repository_factory(session).record(term_id, verdict)
+                    await session.commit()
+        except TimeoutError:
+            logger.warning(
+                "Timed out tallying %s verdict for term %s, skipping",
+                verdict.value,
+                term_id,
+            )
+            continue
         logger.info("Tallied %s verdict for term %s", verdict.value, term_id)
 
 
@@ -89,23 +101,3 @@ async def _supervise(
                 RESTART_BACKOFF_SECONDS,
             )
             await asyncio.sleep(RESTART_BACKOFF_SECONDS)
-
-
-def start_consumer_task(
-    consumer: AIOKafkaConsumer,
-    session_factory: Any,
-    health: ConsumerHealth,
-) -> asyncio.Task[None]:
-    """Spawn the supervised consumer loop as a background task.
-
-    Caller (lifespan) owns cancellation: cancel the task and await it
-    wrapped in suppress(asyncio.CancelledError) on shutdown.
-    """
-    return asyncio.create_task(_supervise(consumer, session_factory, health))
-
-
-async def stop_consumer_task(task: asyncio.Task[None]) -> None:
-    """Cancel and await the background consumer task."""
-    task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await task

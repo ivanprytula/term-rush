@@ -9,7 +9,6 @@ cache nothing ever populated is a no-op. See ADR-0011.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import logging
 import time
@@ -90,23 +89,3 @@ async def _supervise(
                 RESTART_BACKOFF_SECONDS,
             )
             await asyncio.sleep(RESTART_BACKOFF_SECONDS)
-
-
-def start_consumer_task(
-    consumer: AIOKafkaConsumer,
-    term_repository: GrpcTermRepository,
-    health: ConsumerHealth,
-) -> asyncio.Task[None]:
-    """Spawn the supervised consumer loop as a background task.
-
-    Caller (lifespan) owns cancellation: cancel the task and await it
-    wrapped in suppress(asyncio.CancelledError) on shutdown.
-    """
-    return asyncio.create_task(_supervise(consumer, term_repository, health))
-
-
-async def stop_consumer_task(task: asyncio.Task[None]) -> None:
-    """Cancel and await the background consumer task."""
-    task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await task

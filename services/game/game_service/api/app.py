@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -21,10 +22,12 @@ from game_service.domain.round import RoundExpired
 from game_service.domain.round import RoundFull
 from game_service.domain.round import RoundOver
 from game_service.infrastructure.answer_graded_stats import (
-    stop_consumer_task as stop_stats_consumer_task,
+    _supervise as _supervise_stats,
 )
 from game_service.infrastructure.logging import configure_logging
-from game_service.infrastructure.term_cache_invalidator import stop_consumer_task
+from game_service.infrastructure.term_cache_invalidator import (
+    _supervise as _supervise_term_cache,
+)
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -33,7 +36,18 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Initialize database, gRPC channel, and Kafka producer/consumer on
-    startup, clean up on shutdown."""
+    startup; run both consumer supervisors for the app's life; clean up
+    everything on shutdown.
+
+    The two supervisors run inside one TaskGroup wrapping the yield, instead
+    of each being a separately tracked asyncio.Task cancelled by hand: exiting
+    the `async with` (app shutdown) cancels and awaits both together. Each
+    _supervise loop already swallows its own unexpected exceptions and
+    restarts (see term_cache_invalidator._supervise), so in practice a
+    TaskGroup failure here would only ever be a CancelledError on shutdown —
+    the same case the old manual stop_consumer_task calls handled, just
+    without a second place to track task ownership.
+    """
     try:
         await _init_session_factory()
         logger.info("Database initialized")
@@ -41,17 +55,42 @@ async def lifespan(_app: FastAPI):
         logger.critical(f"Failed to initialize database: {e}")
         raise
     try:
-        yield
+        async with asyncio.TaskGroup() as tg:
+            supervisor_tasks: list[asyncio.Task[None]] = []
+            if dependencies._kafka_consumer is not None:
+                assert dependencies._term_repository is not None
+                assert dependencies._consumer_health is not None
+                supervisor_tasks.append(
+                    tg.create_task(
+                        _supervise_term_cache(
+                            dependencies._kafka_consumer,
+                            dependencies._term_repository,
+                            dependencies._consumer_health,
+                        )
+                    )
+                )
+            if dependencies._stats_consumer is not None:
+                assert dependencies._stats_consumer_health is not None
+                supervisor_tasks.append(
+                    tg.create_task(
+                        _supervise_stats(
+                            dependencies._stats_consumer,
+                            dependencies._session_factory,
+                            dependencies._stats_consumer_health,
+                        )
+                    )
+                )
+            yield
+            # Reaching here means the app is shutting down: cancel both
+            # supervisors (each loops until cancelled — it never finishes on
+            # its own) so the TaskGroup's __aexit__ can join them instead of
+            # waiting on them forever.
+            for task in supervisor_tasks:
+                task.cancel()
     finally:
-        if dependencies._consumer_task is not None:
-            await stop_consumer_task(dependencies._consumer_task)
-            logger.info("Kafka consumer task stopped")
         if dependencies._kafka_consumer is not None:
             await dependencies._kafka_consumer.stop()
             logger.info("Kafka consumer stopped")
-        if dependencies._stats_consumer_task is not None:
-            await stop_stats_consumer_task(dependencies._stats_consumer_task)
-            logger.info("Answer-graded stats consumer task stopped")
         if dependencies._stats_consumer is not None:
             await dependencies._stats_consumer.stop()
             logger.info("Answer-graded stats consumer stopped")

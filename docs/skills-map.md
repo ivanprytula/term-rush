@@ -122,7 +122,7 @@ using one.
 | Facet | Status | Depth | Where |
 | --- | --- | --- | --- |
 | async/await end-to-end | ✅ P1 | L2 | FastAPI async handlers + SQLAlchemy 2.0 async ORM + asyncpg driver. No sync code blocking the loop. `app.py` lifespan uses `async with` for startup/shutdown. All I/O (DB, gRPC, Kafka) is async-native. Next: audit event-loop blocking (call `loop.slow_callback_duration`). |
-| Structured concurrency | 🟡 P2 | L1 | `AIOKafkaConsumer` + `asyncio.create_task()` for 2 concurrent listeners (term-stats, cache invalidation). No `TaskGroup` yet. Next: migrate to `TaskGroup` for cancellation guarantees; add timeout + exception handling. |
+| Structured concurrency | 🟡 P2 | L2 | `AIOKafkaConsumer` supervisors for 2 concurrent listeners (term-stats, cache invalidation), spawned into one `asyncio.TaskGroup` wrapping `lifespan`'s yield — shutdown cancels and joins both instead of tracking each `Task` by hand. The DB-writing consumer (answer-graded stats) bounds its per-message write with `asyncio.timeout()`; the cache-invalidating one skips it — sync, non-blocking, no await point to bound. Next: decide exception-group handling if a supervisor ever escapes its internal restart loop. |
 | Backpressure + bounded concurrency | ⏳ P2 | L0 | Not implemented. LLM calls are sequential (1 per grade). Next: add `asyncio.Semaphore` to bound concurrent calls; measure queue depth under load. |
 | CPU-bound vs IO-bound | ⏳ P2 | L0 | FSRS batch recompute not yet implemented (P3+). Next: benchmark CPU work on event loop vs `ProcessPoolExecutor`; document the decision. |
 | Cancellation + timeouts | ⏳ P2 | L0 | Not implemented. Next: add `asyncio.timeout()` to LLM calls + proper `CancelledError` propagation. |
@@ -232,7 +232,7 @@ Each session deepens one or two focus areas, moving items from L1→L2→L3→L4
 | Focus | Current | Next step | Why |
 | --- | --- | --- | --- |
 | Streaming UI | L1 | Add reconnection + timeout handling for network failures | SSE can fail mid-stream; need graceful fallback |
-| Structured concurrency | L1 | Migrate manual `create_task()` to `TaskGroup` with timeouts | Guarantees cancellation; easier to reason about |
+| Structured concurrency | L2 | Bound the answer-graded-stats consumer's DB write with `asyncio.timeout()`; skip term-cache invalidation (sync, non-blocking — no await point to bound) | A hung DB commit shouldn't block that supervisor indefinitely |
 | GraphQL BFF | L1 | Resolve unused fields (`randomTerm`); validate N+1 patterns | Schema should match what clients actually use |
 | Input validation | L2 | Comprehensive Pydantic audit (all endpoints + error messages) | Trust boundary; every gap is a risk |
 | Observability logging | L2 | Verify all error paths are logged (no silent failures) | Debugging production requires complete traces |
