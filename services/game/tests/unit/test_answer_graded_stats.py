@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 import pytest
 
+import game_service.infrastructure.answer_graded_stats as answer_graded_stats
 from game_service.application.ports import TermStatsRepository
 from game_service.domain.outcome import Verdict
 from game_service.domain.term_stats import TermStats
@@ -204,6 +205,46 @@ async def test_supervise_restarts_after_a_crash() -> None:
         await task
 
     assert consumer.attempts == 1
+
+
+class _HangingSession(_FakeSession):
+    """Never returns from commit() — simulates a stuck DB call."""
+
+    async def commit(self) -> None:
+        await asyncio.sleep(3600)
+
+
+@pytest.mark.asyncio
+async def test_a_hung_commit_times_out_and_the_message_is_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A DB call that never returns must not block the consumer forever —
+    it times out, the message is dropped (logged, not retried), and the
+    next message on the same iterator still gets processed."""
+    monkeypatch.setattr(answer_graded_stats, "MESSAGE_TIMEOUT_SECONDS", 0.01)
+    repo = _FakeRepository()
+    hanging_session = _HangingSession()
+    ok_session = _FakeSession()
+    sessions = iter([hanging_session, ok_session])
+    consumer = _FakeConsumer(
+        [
+            _FakeMessage(_envelope("uow", Verdict.CORRECT)),
+            _FakeMessage(_envelope("cqrs", Verdict.PARTIAL)),
+        ]
+    )
+
+    await consume_answer_graded(
+        consumer,  # type: ignore
+        lambda: next(sessions),
+        repository_factory=lambda _session: repo,
+    )
+
+    # The hung message's record() call still happened (there's no way to
+    # cancel mid-await without the timeout firing there first), but its
+    # commit never completed — the second message still gets processed.
+    assert repo.recorded == [("uow", Verdict.CORRECT), ("cqrs", Verdict.PARTIAL)]
+    assert not hanging_session.committed
+    assert ok_session.committed
 
 
 @pytest.mark.asyncio

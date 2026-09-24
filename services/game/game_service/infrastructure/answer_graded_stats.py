@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 
 TOPIC = "answers.graded"
 RESTART_BACKOFF_SECONDS = 5.0
+# Bounds one message's session-open + record + commit — a hung DB call blocks
+# this consumer's whole async for otherwise, with no visible symptom besides
+# ConsumerHealth eventually going stale.
+MESSAGE_TIMEOUT_SECONDS = 5.0
 
 # Constructs a repository from a session. Defaults to the real SQL adapter;
 # tests pass a fake to exercise message-parsing/supervisor behavior without
@@ -54,9 +58,18 @@ async def consume_answer_graded(
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
             logger.warning("Malformed AnswerGraded message, skipping: %s", exc)
             continue
-        async with session_factory() as session:
-            await repository_factory(session).record(term_id, verdict)
-            await session.commit()
+        try:
+            async with asyncio.timeout(MESSAGE_TIMEOUT_SECONDS):
+                async with session_factory() as session:
+                    await repository_factory(session).record(term_id, verdict)
+                    await session.commit()
+        except TimeoutError:
+            logger.warning(
+                "Timed out tallying %s verdict for term %s, skipping",
+                verdict.value,
+                term_id,
+            )
+            continue
         logger.info("Tallied %s verdict for term %s", verdict.value, term_id)
 
 
