@@ -233,6 +233,67 @@ async def test_get_random_term_raises_when_category_has_no_terms(
 
 
 @pytest.mark.asyncio
+async def test_get_random_term_scopes_to_difficulty_floor() -> None:
+    """difficulty, if given, excludes terms below that floor."""
+    easy_term = Term(
+        id="lambda",
+        term="lambda",
+        expansion="anonymous function",
+        definitions=("A function defined without a name.",),
+        categories=(Category(slug="python-keywords"),),
+        difficulty=Difficulty.EASY,
+    )
+    hard_term = Term(
+        id="uow",
+        term="UoW",
+        expansion="Unit of Work",
+        definitions=("Pattern that groups related changes into one unit.",),
+        categories=(Category(slug="architecture"),),
+        difficulty=Difficulty.HARD,
+    )
+    uow = InMemoryUnitOfWork(terms={"lambda": easy_term, "uow": hard_term})
+
+    term = await GetNextTerm(uow).execute(difficulty=Difficulty.HARD)
+
+    assert term.id == "uow"
+
+
+@pytest.mark.asyncio
+async def test_get_random_term_raises_when_no_term_meets_difficulty(
+    uow: InMemoryUnitOfWork,
+) -> None:
+    """A difficulty floor no term clears raises, distinctly from an empty bank."""
+    with pytest.raises(ValueError, match="No term meets the requested difficulty"):
+        await GetNextTerm(uow).execute(difficulty=Difficulty.EXPERT)
+
+
+@pytest.mark.asyncio
+async def test_get_next_term_ignores_difficulty_for_a_boss_round() -> None:
+    """Boss always derives its own filter; a caller-supplied difficulty
+    (even one no term meets) must not override or block it."""
+    eligible = Term(
+        id="uow",
+        term="UoW",
+        expansion="Unit of Work",
+        definitions=(
+            "Pattern that groups related changes into one transactional unit.",
+        ),
+        categories=(Category(slug="architecture"),),
+        difficulty=Difficulty.HARD,
+        examples=("Committing several repository writes as one transaction.",),
+    )
+    uow = InMemoryUnitOfWork(terms={"uow": eligible})
+    boss_round = GameRound.start(datetime.now(UTC), mode=RoundMode.BOSS)
+    await uow.rounds.save(boss_round)
+
+    term = await GetNextTerm(uow).execute(
+        round_id=boss_round.id, difficulty=Difficulty.TRIVIAL
+    )
+
+    assert term.id == "uow"
+
+
+@pytest.mark.asyncio
 async def test_list_term_categories_returns_every_distinct_slug(
     uow: InMemoryUnitOfWork,
 ) -> None:

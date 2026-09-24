@@ -79,7 +79,6 @@ are not server-owned gameplay rules.
 
 ## What this does not solve
 
-- Difficulty selection or server-side difficulty filtering.
 - Falling-term arcade gameplay.
 - Authenticated synchronization of browser preferences across devices.
 - Server-owned streak state; the current HUD is a view of the current round's
@@ -92,7 +91,5 @@ are not server-owned gameplay rules.
   game-service as the owner.
 - If users can sign in and expect preferences across devices, move theme,
   voice language, and Sprint duration into authenticated user preferences.
-- If difficulty becomes a player-facing mode, add an explicit validated
-  difficulty contract to the round API and include its capabilities here.
 - If config becomes versioned or tenant-specific, add an explicit config
   version or scope rather than silently changing the response semantics.
