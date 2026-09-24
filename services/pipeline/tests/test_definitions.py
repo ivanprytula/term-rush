@@ -23,6 +23,7 @@ from pipeline_service.candidate import Confidence
 from pipeline_service.candidate import SourceType
 from pipeline_service.candidate import TermCandidate
 from pipeline_service.definitions import defs
+from pipeline_service.document_ingestion.chunking import DocumentChunk
 from pipeline_service.enrich import AnthropicEnricher
 from pipeline_service.enriched_term import EnrichedTerm
 
@@ -38,6 +39,9 @@ def test_definitions_resolve_every_asset() -> None:
         "enriched_candidates",
         "validated_candidates",
         "loaded_candidates",
+        "intake_documents",
+        "document_chunks",
+        "ingested_chunks",
     }
 
 
@@ -374,3 +378,33 @@ def test_validate_then_load_chain_submits_the_valid_term(
 
     assert result.success
     assert result.output_for_node("loaded_candidates") == (99,)
+
+
+def test_document_chunks_then_ingest_chain_submits_the_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The document_chunks -> ingested_chunks handoff, with the HTTP
+    submission stubbed - proves this second asset chain also passes data
+    correctly across a hop, same as the term pipeline's validate/load test
+    above.
+    """
+    from pipeline_service.document_ingestion.assets import document_chunks
+    from pipeline_service.document_ingestion.assets import ingested_chunks
+
+    @dg.asset(dagster_type=dg.Any, name="intake_documents")  # type: ignore
+    def fake_intake_documents() -> tuple[tuple[str, str], ...]:
+        return (("contract.pdf", "some document text"),)
+
+    async def _fake_submit_chunks(_client, _url, chunks: tuple[DocumentChunk, ...]):
+        assert len(chunks) == 1
+        return tuple(range(len(chunks)))
+
+    monkeypatch.setattr(
+        "pipeline_service.document_ingestion.assets.submit_chunks",
+        _fake_submit_chunks,
+    )
+
+    result = dg.materialize([fake_intake_documents, document_chunks, ingested_chunks])
+
+    assert result.success
+    assert result.output_for_node("ingested_chunks") == (0,)
