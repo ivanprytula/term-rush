@@ -24,12 +24,14 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
     ins={
         "dependency_manifest_candidates": dg.AssetIn(dagster_type=dg.Any),
         "adr_heading_candidates": dg.AssetIn(dagster_type=dg.Any),
+        "class_name_candidates": dg.AssetIn(dagster_type=dg.Any),
     },
 )
 async def enriched_candidates(
     context: AssetExecutionContext,
     dependency_manifest_candidates: tuple[TermCandidate, ...],
     adr_heading_candidates: tuple[TermCandidate, ...],
+    class_name_candidates: tuple[TermCandidate, ...],
 ) -> tuple[tuple[EnrichedTerm, TermCandidate], ...]:
     """Enrich stage: one LLM call per candidate, grounded by a small
     amount of real repo usage (ADR-0004). Pairs each drafted term with
@@ -47,7 +49,7 @@ async def enriched_candidates(
     results: list[tuple[EnrichedTerm, TermCandidate]] = []
 
     all_candidates = sorted(
-        dependency_manifest_candidates + adr_heading_candidates,
+        dependency_manifest_candidates + adr_heading_candidates + class_name_candidates,
         key=lambda c: confidence_rank(c.confidence),
     )
     deduped: dict[str, TermCandidate] = {}

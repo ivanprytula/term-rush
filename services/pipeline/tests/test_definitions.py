@@ -14,6 +14,7 @@ import dagster as dg
 import pytest
 
 from pipeline_service.assets.candidates import adr_heading_candidates
+from pipeline_service.assets.candidates import class_name_candidates
 from pipeline_service.assets.candidates import dependency_manifest_candidates
 from pipeline_service.assets.enriched import enriched_candidates
 from pipeline_service.assets.loaded import loaded_candidates
@@ -33,6 +34,7 @@ def test_definitions_resolve_every_asset() -> None:
     assert keys == {
         "dependency_manifest_candidates",
         "adr_heading_candidates",
+        "class_name_candidates",
         "enriched_candidates",
         "validated_candidates",
         "loaded_candidates",
@@ -57,10 +59,20 @@ def test_adr_heading_asset_materializes_real_candidates() -> None:
     assert all(isinstance(c, TermCandidate) for c in candidates)
 
 
+def test_class_name_asset_materializes_real_candidates() -> None:
+    result = dg.materialize([class_name_candidates])
+
+    assert result.success
+    candidates = result.output_for_node("class_name_candidates")
+    assert len(candidates) > 0
+    assert all(isinstance(c, TermCandidate) for c in candidates)
+
+
 def _materialize_enrich_dedup(
     monkeypatch: pytest.MonkeyPatch,
     manifest_candidates: tuple[TermCandidate, ...],
     adr_candidates: tuple[TermCandidate, ...],
+    class_candidates: tuple[TermCandidate, ...] = (),
 ) -> list[TermCandidate]:
     """Materialize enriched_candidates against fake upstream assets,
     recording which TermCandidate each enrich() call received.
@@ -73,6 +85,10 @@ def _materialize_enrich_dedup(
     @dg.asset(dagster_type=dg.Any, name="adr_heading_candidates")  # type: ignore
     def fake_adr_candidates() -> tuple[TermCandidate, ...]:
         return adr_candidates
+
+    @dg.asset(dagster_type=dg.Any, name="class_name_candidates")  # type: ignore
+    def fake_class_candidates() -> tuple[TermCandidate, ...]:
+        return class_candidates
 
     enrich_calls: list[TermCandidate] = []
 
@@ -90,7 +106,12 @@ def _materialize_enrich_dedup(
     monkeypatch.setattr(AnthropicEnricher, "enrich", _fake_enrich)
 
     result = dg.materialize(
-        [fake_manifest_candidates, fake_adr_candidates, enriched_candidates]
+        [
+            fake_manifest_candidates,
+            fake_adr_candidates,
+            fake_class_candidates,
+            enriched_candidates,
+        ]
     )
     assert result.success
     return enrich_calls
@@ -153,6 +174,60 @@ def test_enrich_asset_dedup_keeps_higher_confidence_even_when_seen_last(
 
     assert len(enrich_calls) == 1
     assert enrich_calls[0] == high_confidence
+
+
+def test_enrich_asset_includes_the_class_name_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A candidate that only the class-name source yields must still
+    reach enrich - proves class_name_candidates is actually wired into
+    the merge, not just declared as an unused asset dependency.
+    """
+    class_candidate = TermCandidate(
+        name="UnitOfWork",
+        source_type=SourceType.CLASS_NAME,
+        source_file="ports.py",
+        confidence=Confidence.MEDIUM,
+    )
+
+    enrich_calls = _materialize_enrich_dedup(monkeypatch, (), (), (class_candidate,))
+
+    assert enrich_calls == [class_candidate]
+
+
+def test_enrich_asset_dedup_spans_all_three_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same term named by all three sources still enriches once,
+    keeping the highest-confidence candidate.
+    """
+    low_confidence = TermCandidate(
+        name="unitofwork",
+        source_type=SourceType.CLASS_NAME,
+        source_file="ports.py",
+        confidence=Confidence.MEDIUM,
+    )
+    lower_confidence = TermCandidate(
+        name="UnitOfWork",
+        source_type=SourceType.ADR_HEADING,
+        source_file="docs/adr/0003.md",
+        confidence=Confidence.LOW,
+    )
+    highest_confidence = TermCandidate(
+        name="Unit-Of-Work",
+        source_type=SourceType.DEPENDENCY_MANIFEST,
+        source_file="pyproject.toml",
+        confidence=Confidence.HIGH,
+    )
+
+    enrich_calls = _materialize_enrich_dedup(
+        monkeypatch,
+        (highest_confidence,),
+        (lower_confidence,),
+        (low_confidence,),
+    )
+
+    assert enrich_calls == [highest_confidence]
 
 
 def test_validate_asset_rejects_a_term_that_fails_a_contract() -> None:

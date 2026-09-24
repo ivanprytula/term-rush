@@ -13,6 +13,7 @@ from dagster import AssetExecutionContext
 
 from pipeline_service.candidate import TermCandidate
 from pipeline_service.extractors.adr_headings import extract_adr_headings
+from pipeline_service.extractors.class_names import extract_class_names
 from pipeline_service.extractors.dependency_manifest import extract_dependency_manifests
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -62,6 +63,33 @@ def adr_heading_candidates(
     confidence source: curated prose, human-written).
     """
     candidates = extract_adr_headings(REPO_ROOT)
+
+    context.add_output_metadata(
+        {
+            "candidate_count": len(candidates),
+            "preview": dg.MetadataValue.md(
+                "\n".join(f"- `{c.name}`" for c in candidates[:20])
+            ),
+        }
+    )
+    context.log.info("Extracted %d candidates", len(candidates))
+
+    return candidates
+
+
+@dg.asset(
+    group_name="extract",
+    description="Candidate terms parsed from documented class/Protocol names.",
+    dagster_type=dg.Any,  # type: ignore  # variadic tuple; see above
+)
+def class_name_candidates(
+    context: AssetExecutionContext,
+) -> tuple[TermCandidate, ...]:
+    """Extract stage for the class/Protocol-name source (ADR-0004,
+    Medium-confidence source: project-local jargon, not industry
+    vocabulary).
+    """
+    candidates = extract_class_names(REPO_ROOT)
 
     context.add_output_metadata(
         {
