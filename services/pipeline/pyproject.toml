@@ -1,0 +1,57 @@
+[project]
+name = "pipeline-service"
+version = "0.1.0"
+description = "Term Rush content pipeline: extract candidate terms from repo sources (ADR-0004, ADR-0005)."
+requires-python = ">=3.14"
+
+dependencies = [
+  "dagster>=1.9",
+  "pydantic>=2.9",
+  "pydantic-settings>=2.15.0",
+  "tomlkit>=0.13",
+  "packaging>=24.2",
+  "anthropic>=0.69",
+  "httpx>=0.27",
+]
+
+[dependency-groups]
+dev = [
+  "dagster-webserver>=1.9",
+  "pytest>=8.3",
+  "ruff>=0.7",
+  "ty>=0.0.81",
+]
+
+[tool.ruff]
+line-length = 88
+cache-dir = ".cache/ruff"
+fix = true
+
+[tool.ruff.lint]
+select = [
+  "E",      # pycodestyle errors
+  "W",      # pycodestyle warnings
+  "F",      # pyflakes
+  "I",      # isort
+  "B",      # flake8-bugbear
+  "C4",     # flake8-comprehensions
+  "UP",     # pyupgrade
+  "ARG001", # unused arguments in functions
+  "T201",   # print statements are not allowed
+]
+ignore = [
+  "E501", # line too long, handled by black
+]
+
+[tool.ruff.lint.isort]
+force-single-line = true
+
+[tool.ty.terminal]
+error-on-warning = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+cache_dir = ".cache/pytest"
+
+[tool.dagster]
+module_name = "pipeline_service.definitions"

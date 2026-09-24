@@ -82,7 +82,7 @@ candidate is auto-promoted, queued for review, or dropped.
 
 Non-negotiable, enforced in the pipeline and failing CI:
 
-- `expansion` is non-empty and differs from `term`
+- `expansion` is non-empty
 - at least one definition, ≥40 chars for anything Boss-eligible
 - `prerequisites` form a **DAG** — a term cannot transitively require itself
 - `related` references resolve to terms that exist
@@ -126,6 +126,16 @@ the least rewarding part.
 
 **Mine public sources (Wikipedia, awesome-lists) instead.** Bigger corpus, no personal
 anchor — straight back to generic trivia, which is the problem being solved.
+
+## Resolution
+
+**Update (2026-09-24):** the "expansion differs from term" contract was dropped.
+Building the pipeline's enrich/validate stages and running a real LLM call against
+the dependency-manifest source surfaced it live: `dagster` has no acronym to expand
+— its own name *is* the expansion (same shape as `FastAPI`, `pydantic`, any proper
+noun rather than an initialism like `UoW`). The contract assumed every term is an
+acronym, which isn't true of this source. `expansion` non-empty stays; the
+differs-from-`term` clause is gone from both this doc and `validate_term`.
 
 ## When I would change this
 

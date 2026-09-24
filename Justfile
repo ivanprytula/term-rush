@@ -73,7 +73,7 @@ arch-verify-service-isolation:
     fi
     echo "OK: architecture contracts reject a game_service->content_service import"
 
-check: quality arch test test-content
+check: quality arch test test-content test-pipeline
 
 # === Tests ===
 
@@ -84,6 +84,10 @@ test *ARGS:
 # Content service tests (separate scope: own pyproject.toml, no cross-service collection).
 test-content *ARGS:
     cd services/content && uv run pytest {{ARGS}}
+
+# Pipeline service tests (own pyproject.toml; needs PYTHONPATH since it's not an editable install).
+test-pipeline *ARGS:
+    PYTHONPATH=services/pipeline uv run pytest services/pipeline/tests {{ARGS}}
 
 coverage:
     uv run pytest --cov-report=term-missing:skip-covered
@@ -135,6 +139,14 @@ seed-content:
     export PROCESS_TYPE=seed
     export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/term_rush_content
     uv run python services/content/content_service/bin/run.py
+
+# Run the Dagster webserver for the content pipeline (:3000; DAGSTER_HOME defaults to a repo-local dir if unset).
+pipeline-dev:
+    #!/usr/bin/env bash
+    export PYTHONPATH=services/pipeline
+    export DAGSTER_HOME="${DAGSTER_HOME:-$PWD/.dagster_home}"
+    mkdir -p "$DAGSTER_HOME"
+    uv run dagster dev -m pipeline_service.definitions
 
 # Run game-service API with hot-reload (:8000; requires postgres + migrations + content-service running).
 dev:
