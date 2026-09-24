@@ -16,6 +16,7 @@ class SourceType(StrEnum):
     """Where a candidate was extracted from. Drives default confidence."""
 
     DEPENDENCY_MANIFEST = "dependency_manifest"
+    ADR_HEADING = "adr_heading"
 
 
 class Confidence(StrEnum):
@@ -24,6 +25,17 @@ class Confidence(StrEnum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
+
+
+_CONFIDENCE_RANK = {Confidence.HIGH: 0, Confidence.MEDIUM: 1, Confidence.LOW: 2}
+
+
+def confidence_rank(confidence: Confidence) -> int:
+    """Sort key: lower rank = more trusted. Explicit table rather than
+    enum declaration order, so reordering members above can't silently
+    change what "wins" when two sources name the same term.
+    """
+    return _CONFIDENCE_RANK[confidence]
 
 
 class TermCandidate(BaseModel):

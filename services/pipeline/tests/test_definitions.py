@@ -13,13 +13,16 @@ from __future__ import annotations
 import dagster as dg
 import pytest
 
+from pipeline_service.assets.candidates import adr_heading_candidates
 from pipeline_service.assets.candidates import dependency_manifest_candidates
+from pipeline_service.assets.enriched import enriched_candidates
 from pipeline_service.assets.loaded import loaded_candidates
 from pipeline_service.assets.validated import validated_candidates
 from pipeline_service.candidate import Confidence
 from pipeline_service.candidate import SourceType
 from pipeline_service.candidate import TermCandidate
 from pipeline_service.definitions import defs
+from pipeline_service.enrich import AnthropicEnricher
 from pipeline_service.enriched_term import EnrichedTerm
 
 
@@ -29,6 +32,7 @@ def test_definitions_resolve_every_asset() -> None:
 
     assert keys == {
         "dependency_manifest_candidates",
+        "adr_heading_candidates",
         "enriched_candidates",
         "validated_candidates",
         "loaded_candidates",
@@ -42,6 +46,113 @@ def test_extract_asset_materializes_real_candidates() -> None:
     candidates = result.output_for_node("dependency_manifest_candidates")
     assert len(candidates) > 0
     assert all(isinstance(c, TermCandidate) for c in candidates)
+
+
+def test_adr_heading_asset_materializes_real_candidates() -> None:
+    result = dg.materialize([adr_heading_candidates])
+
+    assert result.success
+    candidates = result.output_for_node("adr_heading_candidates")
+    assert len(candidates) > 0
+    assert all(isinstance(c, TermCandidate) for c in candidates)
+
+
+def _materialize_enrich_dedup(
+    monkeypatch: pytest.MonkeyPatch,
+    manifest_candidates: tuple[TermCandidate, ...],
+    adr_candidates: tuple[TermCandidate, ...],
+) -> list[TermCandidate]:
+    """Materialize enriched_candidates against fake upstream assets,
+    recording which TermCandidate each enrich() call received.
+    """
+
+    @dg.asset(dagster_type=dg.Any, name="dependency_manifest_candidates")  # type: ignore
+    def fake_manifest_candidates() -> tuple[TermCandidate, ...]:
+        return manifest_candidates
+
+    @dg.asset(dagster_type=dg.Any, name="adr_heading_candidates")  # type: ignore
+    def fake_adr_candidates() -> tuple[TermCandidate, ...]:
+        return adr_candidates
+
+    enrich_calls: list[TermCandidate] = []
+
+    async def _fake_enrich(self, candidate, snippets):  # noqa: ANN001, ANN202, ARG001
+        enrich_calls.append(candidate)
+        return EnrichedTerm(
+            id="x",
+            term=candidate.name,
+            expansion=candidate.name,
+            definitions=("A definition.",),
+            categories=("theory",),
+            difficulty=1,
+        )
+
+    monkeypatch.setattr(AnthropicEnricher, "enrich", _fake_enrich)
+
+    result = dg.materialize(
+        [fake_manifest_candidates, fake_adr_candidates, enriched_candidates]
+    )
+    assert result.success
+    return enrich_calls
+
+
+def test_enrich_asset_dedupes_a_term_named_by_two_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`fastapi` extracted by both sources must enrich once."""
+    manifest_candidate = TermCandidate(
+        name="fastapi",
+        source_type=SourceType.DEPENDENCY_MANIFEST,
+        source_file="pyproject.toml",
+        confidence=Confidence.HIGH,
+    )
+    adr_candidate = TermCandidate(
+        name="FastAPI",  # differs only by case/normalization from the above
+        source_type=SourceType.ADR_HEADING,
+        source_file="docs/adr/0003.md",
+        confidence=Confidence.MEDIUM,
+    )
+
+    enrich_calls = _materialize_enrich_dedup(
+        monkeypatch, (manifest_candidate,), (adr_candidate,)
+    )
+
+    assert len(enrich_calls) == 1
+
+
+def test_enrich_asset_dedup_keeps_higher_confidence_even_when_seen_last(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The winner is decided by confidence rank, not extraction/merge
+    order: a HIGH-confidence candidate wins even when the asset that
+    yields it is positioned after the LOW-confidence one in the params
+    the enrich asset receives.
+
+    low_confidence is passed as the FIRST tuple (dependency_manifest_
+    candidates param) and high_confidence as the SECOND (adr_heading_
+    candidates) - inverted from the "expected" source pairing, so a
+    merge-order-based dedup would keep low_confidence. Rank-based dedup
+    must still win with high_confidence regardless.
+    """
+    low_confidence = TermCandidate(
+        name="fastapi",
+        source_type=SourceType.ADR_HEADING,
+        source_file="docs/adr/0003.md",
+        confidence=Confidence.LOW,
+    )
+    high_confidence = TermCandidate(
+        name="FastAPI",
+        source_type=SourceType.DEPENDENCY_MANIFEST,
+        source_file="pyproject.toml",
+        confidence=Confidence.HIGH,
+    )
+
+    enrich_calls = _materialize_enrich_dedup(
+        monkeypatch, (low_confidence,), (high_confidence,)
+    )
+
+    assert len(enrich_calls) == 1
+    assert enrich_calls[0] == high_confidence
 
 
 def test_validate_asset_rejects_a_term_that_fails_a_contract() -> None:
