@@ -48,9 +48,11 @@ class ValidationOutcome(BaseModel):
         return ValidationOutcome(is_valid=False, errors=errors)
 
 
-def _normalized(term_name: str) -> str:
+def normalized_term_key(term_name: str) -> str:
     """TCP/IP and TCP IP collapse to the same key: lowercase, non-
-    alphanumeric stripped."""
+    alphanumeric stripped. Shared with the enrich stage's cross-source
+    merge, so "the same term" means one thing across the pipeline.
+    """
     return "".join(c for c in term_name.lower() if c.isalnum())
 
 
@@ -84,7 +86,7 @@ def validate_batch(terms: tuple[EnrichedTerm, ...]) -> ValidationOutcome:
 
     seen: dict[str, str] = {}
     for term in terms:
-        key = _normalized(term.term)
+        key = normalized_term_key(term.term)
         if key in seen:
             errors.append(
                 f"duplicate term after normalization: {term.term!r} and "
