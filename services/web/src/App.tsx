@@ -7,6 +7,7 @@ import {
   submitAnswerGameRoundsRoundIdAnswersSubmitPost,
 } from "./client";
 import type {
+  Difficulty,
   GameConfigResponse,
   RoundMode,
   SubmitAnswerResponse,
@@ -41,6 +42,18 @@ const MODE_LABEL: Record<RoundMode, string> = {
   survival: "survival — 3 lives",
   boss: "boss — one hard term, AI-graded",
   daily_20: "daily 20 — today's shared set",
+};
+
+// Mirrors game_service.domain.term.Difficulty — a minimum floor, not an
+// exact match (see GET /terms/random's difficulty query param).
+const DIFFICULTIES: readonly Difficulty[] = [1, 2, 3, 4, 5];
+
+const DIFFICULTY_LABEL: Record<Difficulty, string> = {
+  1: "trivial",
+  2: "easy",
+  3: "moderate",
+  4: "hard",
+  5: "expert",
 };
 
 const THEMES = [
@@ -204,6 +217,42 @@ function CategoryPicker({
         {categories.map((c) => (
           <option key={c} value={c}>
             {c}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+// null means "any difficulty" (no floor) — the <select>'s own empty-string
+// option, matching CategoryPicker's ALL_TERMS sentinel pattern.
+const ANY_DIFFICULTY = "";
+
+function DifficultyPicker({
+  selected,
+  onChange,
+}: {
+  selected: Difficulty | null;
+  onChange: (difficulty: Difficulty | null) => void;
+}) {
+  return (
+    <label className="flex items-center justify-center gap-2 text-sm text-text-dim">
+      difficulty
+      <select
+        value={selected ?? ANY_DIFFICULTY}
+        onChange={(e) =>
+          onChange(
+            e.target.value === ANY_DIFFICULTY
+              ? null
+              : (Number(e.target.value) as Difficulty),
+          )
+        }
+        className="bg-surface border border-surface-border text-text px-2 py-1 focus:outline-none focus:border-phosphor"
+      >
+        <option value={ANY_DIFFICULTY}>any</option>
+        {DIFFICULTIES.map((d) => (
+          <option key={d} value={d}>
+            {DIFFICULTY_LABEL[d]}+
           </option>
         ))}
       </select>
@@ -510,6 +559,17 @@ export default function App() {
   // Locked in at round start, same pattern as roundMode — changing the
   // picker mid-round has no effect until the next "start round"/"play again".
   const [roundCategory, setRoundCategory] = useState<string | null>(null);
+  // Same shape as category: a query param on every GET /terms/random call,
+  // not round state server-side. Ignored by the server for Boss rounds
+  // (always boss-eligible regardless), so the picker still shows but has no
+  // effect there — same as the AI-grading checkbox being replaced by a
+  // statement of fact for Boss, this one just isn't worth hiding.
+  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty | null>(
+    null,
+  );
+  const [roundDifficulty, setRoundDifficulty] = useState<Difficulty | null>(
+    null,
+  );
   // Server's remaining_seconds as of the last round response; re-syncs the
   // rAF countdown below whenever a fresh round starts.
   const [serverRemaining, setServerRemaining] = useState<number | null>(null);
@@ -591,16 +651,24 @@ export default function App() {
 
   const started = roundId !== null;
 
-  // category defaults to roundCategory (the round's locked-in choice) so
-  // every call site except startRound (which hasn't locked it in yet this
-  // tick) can omit the argument.
-  const loadTerm = async (activeRoundId: string, category = roundCategory) => {
+  // category/difficulty default to the round's locked-in choice so every
+  // call site except startRound (which hasn't locked them in yet this tick)
+  // can omit the arguments.
+  const loadTerm = async (
+    activeRoundId: string,
+    category = roundCategory,
+    difficulty = roundDifficulty,
+  ) => {
     setError(null);
     setResult(null);
     setAnswer("");
     setLiveFeedback(null);
     const { data } = await getRandomTermTermsRandomGet({
-      query: { round_id: activeRoundId, category: category ?? undefined },
+      query: {
+        round_id: activeRoundId,
+        category: category ?? undefined,
+        difficulty: difficulty ?? undefined,
+      },
     });
     // The generated client can return a falsy `error` (e.g. "") on some
     // failure shapes, so check for a real response body instead of
@@ -620,6 +688,7 @@ export default function App() {
   const startRound = async () => {
     setError(null);
     setRoundCategory(selectedCategory);
+    setRoundDifficulty(selectedDifficulty);
     const { data } = await createRoundGameRoundsPost({
       body: {
         mode: selectedMode,
@@ -638,9 +707,10 @@ export default function App() {
     setRoundMode(data.mode as RoundMode);
     setServerRemaining(data.remaining_seconds ?? null);
     setDailyTermCount(data.terms_remaining ?? null);
-    // Explicit selectedCategory, not loadTerm's roundCategory default:
-    // setRoundCategory above hasn't committed yet in this same tick.
-    await loadTerm(data.id, selectedCategory);
+    // Explicit selectedCategory/selectedDifficulty, not loadTerm's
+    // roundCategory/roundDifficulty defaults: the setters above haven't
+    // committed yet in this same tick.
+    await loadTerm(data.id, selectedCategory, selectedDifficulty);
   };
 
   const startNewRound = () => {
@@ -763,6 +833,10 @@ export default function App() {
               categories={categories}
               selected={selectedCategory}
               onChange={setSelectedCategory}
+            />
+            <DifficultyPicker
+              selected={selectedDifficulty}
+              onChange={setSelectedDifficulty}
             />
             <button
               type="button"

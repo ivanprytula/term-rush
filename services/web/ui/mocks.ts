@@ -41,6 +41,7 @@ export async function mockBackend(
   } = {},
 ): Promise<{
   lastRandomTermCategory: () => string | null;
+  lastRandomTermDifficulty: () => string | null;
   lastRoundRequest: () => {
     mode?: "classic" | "sprint" | "survival" | "boss" | "daily_20";
     duration_seconds?: number;
@@ -55,6 +56,7 @@ export async function mockBackend(
   let roundCounter = 0;
   let termIndex = 0;
   let lastRandomTermCategory: string | null = null;
+  let lastRandomTermDifficulty: string | null = null;
   let lastRoundRequest: {
     mode?: "classic" | "sprint" | "survival" | "boss" | "daily_20";
     duration_seconds?: number;
@@ -131,6 +133,7 @@ export async function mockBackend(
   await page.route("**/terms/random**", async (route) => {
     const url = new URL(route.request().url());
     lastRandomTermCategory = url.searchParams.get("category");
+    lastRandomTermDifficulty = url.searchParams.get("difficulty");
     const term = TERMS[termIndex % TERMS.length];
     termIndex += 1;
     await route.fulfill({
@@ -196,6 +199,7 @@ export async function mockBackend(
 
   return {
     lastRandomTermCategory: () => lastRandomTermCategory,
+    lastRandomTermDifficulty: () => lastRandomTermDifficulty,
     lastRoundRequest: () => lastRoundRequest,
   };
 }
