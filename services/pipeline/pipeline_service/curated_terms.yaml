@@ -1,0 +1,56 @@
+# ADR-0004's Curated source: CS/Python-internals vocabulary this repo does
+# not and should not contain in production code, added for interview depth
+# rather than repo self-reference. Hand-authored and hand-reviewed - no
+# extractor, no LLM enrich. Each entry is EnrichedTerm's own shape.
+
+- id: gil
+  term: GIL
+  expansion: Global Interpreter Lock
+  definitions:
+    - "A mutex in CPython that allows only one thread to execute Python \
+      bytecode at a time, even on a multi-core machine."
+  categories: [python-internals]
+  difficulty: 3
+  examples:
+    - "A CPU-bound multithreaded Python program often runs no faster than \
+      single-threaded, because the GIL serializes bytecode execution; \
+      multiprocessing sidesteps it by using separate interpreter processes."
+  common_mistakes:
+    - "Assuming threading.Thread gives real parallelism for CPU-bound work \
+      in CPython - it only helps for I/O-bound work, where threads release \
+      the GIL while waiting."
+
+- id: descriptor-protocol
+  term: Descriptor protocol
+  expansion: Descriptor protocol
+  definitions:
+    - "The `__get__`/`__set__`/`__delete__` methods that let an object \
+      customize attribute access on another class. Underlies `property`, \
+      `staticmethod`, `classmethod`, and ORM field mapping."
+  categories: [python-internals]
+  difficulty: 4
+  examples:
+    - "`property` is a descriptor: `obj.x` triggers `type(obj).__dict__['x'].__get__(obj, type(obj))` \
+      rather than a plain attribute lookup."
+  common_mistakes:
+    - "Confusing a descriptor with a plain instance attribute - descriptors \
+      live on the class, not the instance, so they run the same __get__ for \
+      every instance."
+
+- id: mro
+  term: MRO
+  expansion: Method Resolution Order
+  definitions:
+    - "The linearized order Python searches base classes when resolving an \
+      attribute or method, computed by the C3 linearization algorithm for \
+      multiple inheritance."
+  categories: [python-internals]
+  difficulty: 3
+  examples:
+    - "`type(obj).__mro__` shows the search order; `super()` follows this \
+      order too, not just \"the immediate parent\" - which matters for \
+      diamond inheritance."
+  common_mistakes:
+    - "Assuming super() always calls the direct parent class - it actually \
+      calls the next class in the MRO, which depends on the full \
+      inheritance graph, not just the immediate base."

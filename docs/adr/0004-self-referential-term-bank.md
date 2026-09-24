@@ -52,7 +52,7 @@ a pipeline that must reconcile three sources of differing trust is.
 | Docstrings + class/Protocol names | **Medium** | `Grader`, `AnswerEvaluator`, `UnitOfWork` | Project-local jargon, not industry vocabulary |
 | Code identifiers, comments | **Low** — noisy | everything and nothing | Mostly junk; needs aggressive filtering |
 | Config keys, env vars, k8s manifests | **Medium** | `HPA`, `PDB`, `readinessProbe` | Vendor-specific |
-| Hand-curated CS/Python-internals list | **Curated** — human-authored, not extracted | GIL, descriptor protocol, MRO, `__slots__`, generational GC | No repo anchor; purely interview-driven, must stay small and deliberate |
+| Hand-curated CS/Python/system-design list | **Curated** — human-authored, not extracted | GIL, descriptor protocol, MRO, `__slots__`, generational GC, CAP theorem, idempotency keys, consistent hashing | No repo anchor; interview-prep driven, deliberately the largest source over time |
 
 Confidence is carried through the pipeline as a first-class field and drives whether a
 candidate is auto-promoted, queued for review, or dropped. The curated source is the
@@ -141,16 +141,24 @@ noun rather than an initialism like `UoW`). The contract assumed every term is a
 acronym, which isn't true of this source. `expansion` non-empty stays; the
 differs-from-`term` clause is gone from both this doc and `validate_term`.
 
-**Update (2026-09-24):** added a curated source for CS/Python-internals vocabulary
-(GIL, descriptor protocol, MRO, `__slots__`, generational GC) that this repo does
-not and should not contain — a game service has no reason to demonstrate the
-descriptor protocol in production code. This is not the "plateau below ~200 terms"
-trigger from *When I would change this* below; the motive is depth for interview
-prep, not corpus size. Kept as a distinct, honestly-labeled exception rather than
-folded into an extraction source: no parser, no file/line provenance, confidence
-is `Curated` not High/Medium/Low. Bounded deliberately — this list stays small and
-hand-reviewed, not an open door back to "mine public sources," which the
-Alternatives section above already rejects for good reason.
+**Update (2026-09-24):** added a curated source for CS/Python-internals and
+system-design vocabulary (GIL, descriptor protocol, MRO, `__slots__`,
+generational GC, CAP theorem, consistent hashing) that this repo does not and
+should not contain — a game service has no reason to demonstrate the
+descriptor protocol in production code. This is not the "plateau below
+~200 terms" trigger from *When I would change this* below; the motive is
+depth for interview prep, not corpus size. Kept as a distinct,
+honestly-labeled exception rather than folded into an extraction source: no
+parser, no file/line provenance, confidence is `Curated` not
+High/Medium/Low.
+
+Deliberately **not** size-bounded — practicing this vocabulary is a real,
+ongoing goal, and this source is expected to grow into the largest one in
+the bank over time. What keeps it disciplined isn't a count, it's that every
+entry is hand-authored and hand-reviewed, term by term — the same
+discipline the review queue already enforces for every other source, not an
+open door back to "mine public sources," which the Alternatives section
+above still rejects for good reason: an entry here is written, not scraped.
 
 ## When I would change this
 
