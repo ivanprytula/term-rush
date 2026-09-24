@@ -12,7 +12,10 @@ from content_service.api.config import settings
 from content_service.api.dependencies import _init_session_factory
 from content_service.api.dependencies import get_unit_of_work
 from content_service.api.grpc.server import serve as serve_grpc
+from content_service.api.routers import review_queue
 from content_service.api.routers import terms
+from content_service.api.schemas import ReviewCandidateConflictResponse
+from content_service.domain.review import ReviewCandidateNotPending
 from content_service.infrastructure.logging import configure_logging
 
 configure_logging()
@@ -50,6 +53,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="Term Rush — content service", lifespan=lifespan)
 
 app.include_router(terms.router)
+app.include_router(review_queue.router)
 
 
 @app.get("/health")
@@ -81,4 +85,22 @@ async def value_error_handler(_request: Request, exc: ValueError) -> JSONRespons
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={"error": str(exc), "status_code": 404},
+    )
+
+
+@app.exception_handler(ReviewCandidateNotPending)
+async def review_candidate_not_pending_handler(
+    _request: Request, exc: ReviewCandidateNotPending
+) -> JSONResponse:
+    """Approving/rejecting an already-decided candidate is a conflict with
+    the queue's current state, not a missing resource — the body carries
+    that state as typed fields so the client can branch on it directly."""
+    body = ReviewCandidateConflictResponse(
+        error=str(exc),
+        candidate_id=exc.candidate_id,
+        current_status=exc.status,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content=body.model_dump(mode="json"),
     )

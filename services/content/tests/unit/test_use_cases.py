@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import pytest
 
+from content_service.application.use_cases import ApproveReviewCandidate
 from content_service.application.use_cases import GetRandomTerm
 from content_service.application.use_cases import GetTermById
 from content_service.application.use_cases import ListCategories
+from content_service.application.use_cases import ListReviewCandidates
 from content_service.application.use_cases import PublishTerm
+from content_service.application.use_cases import RejectReviewCandidate
+from content_service.application.use_cases import SubmitReviewCandidate
+from content_service.domain.review import ReviewCandidateNotPending
+from content_service.domain.review import ReviewStatus
 from content_service.domain.term import Category
 from content_service.domain.term import Term
 from content_service.infrastructure.memory import InMemoryEventPublisher
@@ -159,3 +165,97 @@ async def test_publish_term_publishes_term_published_event() -> None:
     events = uow.events
     assert isinstance(events, InMemoryEventPublisher)
     assert events.events == [("TermPublished", {"term_id": "fsm"})]
+
+
+@pytest.mark.asyncio
+async def test_submit_review_candidate_lands_pending(term: Term) -> None:
+    uow = InMemoryUnitOfWork()
+    use_case = SubmitReviewCandidate(uow)
+
+    candidate = await use_case.execute(
+        term=term,
+        source_type="dependency_manifest",
+        source_file="pyproject.toml",
+        confidence="high",
+    )
+
+    assert candidate.id is not None
+    assert candidate.status == ReviewStatus.PENDING
+    assert candidate.term == term
+    # Never auto-promoted, regardless of confidence.
+    assert await uow.terms.by_id(term.id) is None
+
+
+@pytest.mark.asyncio
+async def test_list_review_candidates_filters_by_status(term: Term) -> None:
+    uow = InMemoryUnitOfWork()
+    await SubmitReviewCandidate(uow).execute(term, "dependency_manifest", "x", "high")
+
+    pending = await ListReviewCandidates(uow).execute(ReviewStatus.PENDING)
+    approved = await ListReviewCandidates(uow).execute(ReviewStatus.APPROVED)
+
+    assert len(pending) == 1
+    assert approved == ()
+
+
+@pytest.mark.asyncio
+async def test_approve_review_candidate_publishes_the_term(term: Term) -> None:
+    uow = InMemoryUnitOfWork()
+    candidate = await SubmitReviewCandidate(uow).execute(
+        term, "dependency_manifest", "x", "high"
+    )
+    assert candidate.id is not None
+
+    published = await ApproveReviewCandidate(uow).execute(candidate.id)
+
+    assert published == term
+    assert await uow.terms.by_id(term.id) == term
+    approved = await uow.review_queue.by_id(candidate.id)
+    assert approved is not None
+    assert approved.status == ReviewStatus.APPROVED
+    events = uow.events
+    assert isinstance(events, InMemoryEventPublisher)
+    assert events.events == [("TermPublished", {"term_id": term.id})]
+
+
+@pytest.mark.asyncio
+async def test_approve_review_candidate_raises_when_missing() -> None:
+    with pytest.raises(ValueError, match="not found"):
+        await ApproveReviewCandidate(InMemoryUnitOfWork()).execute(999)
+
+
+@pytest.mark.asyncio
+async def test_approve_review_candidate_raises_when_not_pending(term: Term) -> None:
+    uow = InMemoryUnitOfWork()
+    candidate = await SubmitReviewCandidate(uow).execute(
+        term, "dependency_manifest", "x", "high"
+    )
+    assert candidate.id is not None
+    await ApproveReviewCandidate(uow).execute(candidate.id)
+
+    with pytest.raises(ReviewCandidateNotPending) as exc_info:
+        await ApproveReviewCandidate(uow).execute(candidate.id)
+    assert exc_info.value.candidate_id == candidate.id
+    assert exc_info.value.status == ReviewStatus.APPROVED
+
+
+@pytest.mark.asyncio
+async def test_reject_review_candidate_never_publishes(term: Term) -> None:
+    uow = InMemoryUnitOfWork()
+    candidate = await SubmitReviewCandidate(uow).execute(
+        term, "dependency_manifest", "x", "high"
+    )
+    assert candidate.id is not None
+
+    await RejectReviewCandidate(uow).execute(candidate.id)
+
+    rejected = await uow.review_queue.by_id(candidate.id)
+    assert rejected is not None
+    assert rejected.status == ReviewStatus.REJECTED
+    assert await uow.terms.by_id(term.id) is None
+
+
+@pytest.mark.asyncio
+async def test_reject_review_candidate_raises_when_missing() -> None:
+    with pytest.raises(ValueError, match="not found"):
+        await RejectReviewCandidate(InMemoryUnitOfWork()).execute(999)

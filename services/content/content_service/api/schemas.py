@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from content_service.domain import constants
+from content_service.domain.review import ReviewCandidate
+from content_service.domain.review import ReviewStatus
 from content_service.domain.term import Category
 from content_service.domain.term import Difficulty
 from content_service.domain.term import Term
@@ -103,6 +105,66 @@ class PublishTermRequest(BaseModel):
             prerequisites=self.prerequisites,
             common_mistakes=self.common_mistakes,
         )
+
+
+class SubmitReviewCandidateRequest(BaseModel):
+    """A pipeline-enriched, validated candidate submitted for review.
+
+    Reuses PublishTermRequest's term shape rather than duplicating it —
+    a candidate's term fields are validated the same way a directly
+    authored term's are.
+    """
+
+    term: PublishTermRequest
+    source_type: str = Field(max_length=64)
+    source_file: str = Field(max_length=512)
+    confidence: str = Field(max_length=16)
+
+
+class ReviewCandidateResponse(BaseModel):
+    """A review candidate, in full."""
+
+    id: int
+    term: TermResponse
+    source_type: str
+    source_file: str
+    confidence: str
+    status: str
+
+    @staticmethod
+    def from_candidate(candidate: ReviewCandidate) -> ReviewCandidateResponse:
+        assert candidate.id is not None  # always set once read back from a repository
+        return ReviewCandidateResponse(
+            id=candidate.id,
+            term=TermResponse.from_term(candidate.term),
+            source_type=candidate.source_type,
+            source_file=candidate.source_file,
+            confidence=candidate.confidence,
+            status=candidate.status.value,
+        )
+
+
+class ReviewQueueListResponse(BaseModel):
+    """A page of review candidates, filtered by status."""
+
+    candidates: tuple[ReviewCandidateResponse, ...]
+
+
+ReviewStatusQuery = Annotated[ReviewStatus, Query()]
+
+
+class ReviewCandidateConflictResponse(BaseModel):
+    """A 409: the candidate exists but isn't in the state the requested
+    transition requires. Carries the actual current status as a typed
+    field, not just prose, so a client can branch on it (e.g. show
+    "already approved" vs "already rejected") without parsing `error`.
+    """
+
+    error: str
+    status_code: int = 409
+    candidate_id: int
+    current_status: ReviewStatus
+    required_status: ReviewStatus = ReviewStatus.PENDING
 
 
 class ErrorResponse(BaseModel):

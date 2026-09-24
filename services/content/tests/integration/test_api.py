@@ -183,3 +183,100 @@ def test_publish_term_missing_definitions_returns_422(
     )
 
     assert response.status_code == 422
+
+
+_CANDIDATE_PAYLOAD = {
+    "term": {
+        "id": "fsm",
+        "term": "FSM",
+        "expansion": "Finite State Machine",
+        "definitions": ["A model with states and transitions."],
+        "categories": ["theory"],
+    },
+    "source_type": "dependency_manifest",
+    "source_file": "pyproject.toml",
+    "confidence": "high",
+}
+
+
+def test_submit_review_candidate_lands_pending(
+    client_with_empty_uow: TestClient,
+) -> None:
+    response = client_with_empty_uow.post(
+        "/review-queue/candidates", json=_CANDIDATE_PAYLOAD
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "pending"
+    assert body["term"]["id"] == "fsm"
+
+    # Never auto-promoted.
+    term_response = client_with_empty_uow.get("/terms/fsm")
+    assert term_response.status_code == 404
+
+
+def test_list_review_candidates_defaults_to_pending(
+    client_with_empty_uow: TestClient,
+) -> None:
+    client_with_empty_uow.post("/review-queue/candidates", json=_CANDIDATE_PAYLOAD)
+
+    response = client_with_empty_uow.get("/review-queue")
+
+    assert response.status_code == 200
+    assert len(response.json()["candidates"]) == 1
+
+
+def test_approve_review_candidate_publishes_the_term(
+    client_with_empty_uow: TestClient,
+) -> None:
+    submitted = client_with_empty_uow.post(
+        "/review-queue/candidates", json=_CANDIDATE_PAYLOAD
+    ).json()
+
+    response = client_with_empty_uow.post(f"/review-queue/{submitted['id']}/approve")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "fsm"
+
+    term_response = client_with_empty_uow.get("/terms/fsm")
+    assert term_response.status_code == 200
+
+
+def test_approve_review_candidate_missing_returns_404(
+    client_with_empty_uow: TestClient,
+) -> None:
+    response = client_with_empty_uow.post("/review-queue/999/approve")
+
+    assert response.status_code == 404
+
+
+def test_approve_review_candidate_already_approved_returns_409(
+    client_with_empty_uow: TestClient,
+) -> None:
+    submitted = client_with_empty_uow.post(
+        "/review-queue/candidates", json=_CANDIDATE_PAYLOAD
+    ).json()
+    client_with_empty_uow.post(f"/review-queue/{submitted['id']}/approve")
+
+    response = client_with_empty_uow.post(f"/review-queue/{submitted['id']}/approve")
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["candidate_id"] == submitted["id"]
+    assert body["current_status"] == "approved"
+    assert body["required_status"] == "pending"
+
+
+def test_reject_review_candidate_never_publishes(
+    client_with_empty_uow: TestClient,
+) -> None:
+    submitted = client_with_empty_uow.post(
+        "/review-queue/candidates", json=_CANDIDATE_PAYLOAD
+    ).json()
+
+    response = client_with_empty_uow.post(f"/review-queue/{submitted['id']}/reject")
+
+    assert response.status_code == 204
+    term_response = client_with_empty_uow.get("/terms/fsm")
+    assert term_response.status_code == 404
