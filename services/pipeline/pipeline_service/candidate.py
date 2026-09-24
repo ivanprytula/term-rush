@@ -17,6 +17,7 @@ class SourceType(StrEnum):
 
     DEPENDENCY_MANIFEST = "dependency_manifest"
     ADR_HEADING = "adr_heading"
+    CLASS_NAME = "class_name"
 
 
 class Confidence(StrEnum):
