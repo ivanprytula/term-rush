@@ -6,10 +6,12 @@ import asyncio
 import random
 from typing import Any
 
+from content_service.application.ports import DocumentChunkRepository
 from content_service.application.ports import EventPublisher
 from content_service.application.ports import ReviewQueueRepository
 from content_service.application.ports import TermRepository
 from content_service.application.ports import UnitOfWork
+from content_service.domain.document_chunk import DocumentChunk
 from content_service.domain.review import ReviewCandidate
 from content_service.domain.review import ReviewStatus
 from content_service.domain.term import Term
@@ -87,6 +89,38 @@ class InMemoryReviewQueueRepository(ReviewQueueRepository):
         self.candidates[candidate_id] = existing.model_copy(update={"status": status})
 
 
+class InMemoryDocumentChunkRepository(DocumentChunkRepository):
+    """Store document chunks in a list, keyed by an auto-incrementing id."""
+
+    def __init__(self) -> None:
+        self.chunks: dict[int, DocumentChunk] = {}
+        self._next_id = 1
+
+    async def add_batch(
+        self, chunks: tuple[DocumentChunk, ...]
+    ) -> tuple[DocumentChunk, ...]:
+        assigned = []
+        for chunk in chunks:
+            with_id = chunk.model_copy(update={"id": self._next_id})
+            self.chunks[self._next_id] = with_id
+            self._next_id += 1
+            assigned.append(with_id)
+        return tuple(assigned)
+
+    async def by_source_file(self, source_file: str) -> tuple[DocumentChunk, ...]:
+        matching = [c for c in self.chunks.values() if c.source_file == source_file]
+        return tuple(sorted(matching, key=lambda c: c.chunk_index))
+
+    async def delete_by_source_file(self, source_file: str) -> None:
+        stale_ids = [
+            chunk_id
+            for chunk_id, chunk in self.chunks.items()
+            if chunk.source_file == source_file
+        ]
+        for chunk_id in stale_ids:
+            del self.chunks[chunk_id]
+
+
 class InMemoryEventPublisher(EventPublisher):
     """Collect events in memory for testing."""
 
@@ -106,6 +140,7 @@ class InMemoryUnitOfWork(UnitOfWork):
     def __init__(self, terms: dict[str, Term] | None = None) -> None:
         self.terms = InMemoryTermRepository(terms)
         self.review_queue = InMemoryReviewQueueRepository()
+        self.document_chunks = InMemoryDocumentChunkRepository()
         self.events = InMemoryEventPublisher()
         self._in_transaction = False
         self._lock: asyncio.Lock | None = None

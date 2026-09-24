@@ -19,6 +19,7 @@ class SourceType(StrEnum):
     ADR_HEADING = "adr_heading"
     CLASS_NAME = "class_name"
     CURATED = "curated"
+    DOCUMENT_OCR = "document_ocr"
 
 
 class Confidence(StrEnum):

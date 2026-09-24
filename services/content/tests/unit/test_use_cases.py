@@ -7,11 +7,14 @@ import pytest
 from content_service.application.use_cases import ApproveReviewCandidate
 from content_service.application.use_cases import GetRandomTerm
 from content_service.application.use_cases import GetTermById
+from content_service.application.use_cases import IngestDocumentChunks
 from content_service.application.use_cases import ListCategories
+from content_service.application.use_cases import ListDocumentChunksBySource
 from content_service.application.use_cases import ListReviewCandidates
 from content_service.application.use_cases import PublishTerm
 from content_service.application.use_cases import RejectReviewCandidate
 from content_service.application.use_cases import SubmitReviewCandidate
+from content_service.domain.document_chunk import DocumentChunk
 from content_service.domain.review import ReviewCandidateNotPending
 from content_service.domain.review import ReviewStatus
 from content_service.domain.term import Category
@@ -196,6 +199,65 @@ async def test_list_review_candidates_filters_by_status(term: Term) -> None:
 
     assert len(pending) == 1
     assert approved == ()
+
+
+def _chunk(source_file: str = "contract.pdf", chunk_index: int = 0) -> DocumentChunk:
+    return DocumentChunk(
+        text=f"chunk {chunk_index}",
+        source_file=source_file,
+        chunk_index=chunk_index,
+        char_start=chunk_index * 100,
+        char_end=chunk_index * 100 + 50,
+    )
+
+
+@pytest.mark.asyncio
+async def test_ingest_document_chunks_assigns_ids() -> None:
+    uow = InMemoryUnitOfWork()
+    use_case = IngestDocumentChunks(uow)
+
+    ingested = await use_case.execute((_chunk(chunk_index=0), _chunk(chunk_index=1)))
+
+    assert all(c.id is not None for c in ingested)
+
+
+@pytest.mark.asyncio
+async def test_list_document_chunks_by_source_returns_only_matching() -> None:
+    uow = InMemoryUnitOfWork()
+    await IngestDocumentChunks(uow).execute(
+        (_chunk("a.pdf", 0), _chunk("a.pdf", 1), _chunk("b.pdf", 0))
+    )
+
+    fetched = await ListDocumentChunksBySource(uow).execute("a.pdf")
+
+    assert len(fetched) == 2
+    assert all(c.source_file == "a.pdf" for c in fetched)
+
+
+@pytest.mark.asyncio
+async def test_reingest_document_chunks_replaces_the_prior_batch() -> None:
+    """Re-ingesting a source file supersedes its old chunks rather than
+    conflicting with them - the whole point of replace semantics."""
+    uow = InMemoryUnitOfWork()
+    use_case = IngestDocumentChunks(uow)
+    await use_case.execute((_chunk("a.pdf", 0), _chunk("a.pdf", 1), _chunk("a.pdf", 2)))
+
+    await use_case.execute((_chunk("a.pdf", 0),))
+
+    fetched = await ListDocumentChunksBySource(uow).execute("a.pdf")
+    assert len(fetched) == 1
+
+
+@pytest.mark.asyncio
+async def test_reingest_document_chunks_leaves_other_sources_untouched() -> None:
+    uow = InMemoryUnitOfWork()
+    use_case = IngestDocumentChunks(uow)
+    await use_case.execute((_chunk("a.pdf", 0), _chunk("b.pdf", 0)))
+
+    await use_case.execute((_chunk("a.pdf", 0), _chunk("a.pdf", 1)))
+
+    fetched = await ListDocumentChunksBySource(uow).execute("b.pdf")
+    assert len(fetched) == 1
 
 
 @pytest.mark.asyncio

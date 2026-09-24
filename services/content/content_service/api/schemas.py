@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from content_service.domain import constants
+from content_service.domain.document_chunk import DocumentChunk
 from content_service.domain.review import ReviewCandidate
 from content_service.domain.review import ReviewStatus
 from content_service.domain.term import Category
@@ -105,6 +106,61 @@ class PublishTermRequest(BaseModel):
             prerequisites=self.prerequisites,
             common_mistakes=self.common_mistakes,
         )
+
+
+class DocumentChunkRequest(BaseModel):
+    """One chunk of document text, as produced by pipeline-service's
+    chunker (ADR-0018)."""
+
+    text: str = Field(min_length=1, max_length=constants.DOCUMENT_CHUNK_MAX_LEN)
+    source_file: str = Field(max_length=constants.DOCUMENT_CHUNK_SOURCE_FILE_MAX_LEN)
+    chunk_index: int = Field(ge=0)
+    char_start: int = Field(ge=0)
+    char_end: int = Field(ge=0)
+
+    def to_chunk(self) -> DocumentChunk:
+        return DocumentChunk(
+            text=self.text,
+            source_file=self.source_file,
+            chunk_index=self.chunk_index,
+            char_start=self.char_start,
+            char_end=self.char_end,
+        )
+
+
+class IngestDocumentChunksRequest(BaseModel):
+    """A batch of chunks from one ingestion run."""
+
+    chunks: tuple[DocumentChunkRequest, ...] = Field(min_length=1)
+
+
+class DocumentChunkResponse(BaseModel):
+    """A persisted document chunk, in full."""
+
+    id: int
+    text: str
+    source_file: str
+    chunk_index: int
+    char_start: int
+    char_end: int
+
+    @staticmethod
+    def from_chunk(chunk: DocumentChunk) -> DocumentChunkResponse:
+        assert chunk.id is not None  # always set once read back from a repository
+        return DocumentChunkResponse(
+            id=chunk.id,
+            text=chunk.text,
+            source_file=chunk.source_file,
+            chunk_index=chunk.chunk_index,
+            char_start=chunk.char_start,
+            char_end=chunk.char_end,
+        )
+
+
+class DocumentChunkListResponse(BaseModel):
+    """A batch of persisted document chunks."""
+
+    chunks: tuple[DocumentChunkResponse, ...]
 
 
 class SubmitReviewCandidateRequest(BaseModel):

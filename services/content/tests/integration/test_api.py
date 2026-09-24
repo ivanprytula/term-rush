@@ -280,3 +280,74 @@ def test_reject_review_candidate_never_publishes(
     assert response.status_code == 204
     term_response = client_with_empty_uow.get("/terms/fsm")
     assert term_response.status_code == 404
+
+
+_CHUNKS_PAYLOAD = {
+    "chunks": [
+        {
+            "text": "first chunk of the contract",
+            "source_file": "contract.pdf",
+            "chunk_index": 0,
+            "char_start": 0,
+            "char_end": 28,
+        },
+        {
+            "text": "second chunk of the contract",
+            "source_file": "contract.pdf",
+            "chunk_index": 1,
+            "char_start": 20,
+            "char_end": 49,
+        },
+    ]
+}
+
+
+def test_ingest_document_chunks_persists_and_returns_ids(
+    client_with_empty_uow: TestClient,
+) -> None:
+    response = client_with_empty_uow.post("/document-chunks", json=_CHUNKS_PAYLOAD)
+
+    assert response.status_code == 201
+    chunks = response.json()["chunks"]
+    assert len(chunks) == 2
+    assert all(c["id"] is not None for c in chunks)
+
+
+def test_list_document_chunks_by_source_returns_only_matching(
+    client_with_empty_uow: TestClient,
+) -> None:
+    client_with_empty_uow.post("/document-chunks", json=_CHUNKS_PAYLOAD)
+    client_with_empty_uow.post(
+        "/document-chunks",
+        json={
+            "chunks": [
+                {
+                    "text": "unrelated chunk",
+                    "source_file": "other.pdf",
+                    "chunk_index": 0,
+                    "char_start": 0,
+                    "char_end": 16,
+                }
+            ]
+        },
+    )
+
+    response = client_with_empty_uow.get(
+        "/document-chunks", params={"source_file": "contract.pdf"}
+    )
+
+    assert response.status_code == 200
+    chunks = response.json()["chunks"]
+    assert len(chunks) == 2
+    assert all(c["source_file"] == "contract.pdf" for c in chunks)
+
+
+def test_list_document_chunks_by_source_empty_when_no_match(
+    client_with_empty_uow: TestClient,
+) -> None:
+    response = client_with_empty_uow.get(
+        "/document-chunks", params={"source_file": "missing.pdf"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["chunks"] == []
