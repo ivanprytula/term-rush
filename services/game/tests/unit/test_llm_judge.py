@@ -8,12 +8,14 @@ schema constraint is guidance, not enforcement.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
 from anthropic.types import ToolUseBlock
 
+import game_service.infrastructure.llm_judge as llm_judge
 from game_service.domain.term import Category
 from game_service.domain.term import Difficulty
 from game_service.domain.term import Term
@@ -184,6 +186,68 @@ class TestStreamRationale:
         sent_content = client.messages.last_kwargs["messages"][0]["content"]
         assert sent_content.count("<student_answer>") == 1
         assert sent_content.count("</student_answer>") == 1
+
+
+class _HangingMessages:
+    """Replaces _FakeMessages when a call must never return on its own —
+    proves the timeout, not the fallback, is what ends the call."""
+
+    async def create(self, **kwargs: Any) -> _FakeResponse:
+        await asyncio.sleep(3600)
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    def stream(self, **kwargs: Any) -> _HangingStreamManager:
+        return _HangingStreamManager()
+
+
+class _HangingStream:
+    text_stream = None  # set in __aenter__ once actually iterated
+
+    async def _hang_forever(self) -> AsyncIterator[str]:
+        await asyncio.sleep(3600)
+        yield "unreachable"  # pragma: no cover - makes this an async generator
+
+
+class _HangingStreamManager:
+    async def __aenter__(self) -> _HangingStream:
+        stream = _HangingStream()
+        stream.text_stream = stream._hang_forever()
+        return stream
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        return None
+
+
+class TestLLMTimeout:
+    """A hung provider call must not block the caller forever — see
+    LLMJudgePort's docstring ("raises on provider failure or timeout") and
+    use_cases.py's _try_llm_grade/_stream_and_grade, which fall back to the
+    deterministic outcome on any Exception, TimeoutError included."""
+
+    @pytest.mark.asyncio
+    async def test_judge_times_out_on_a_hung_call(
+        self, uow_term: Term, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(llm_judge, "LLM_TIMEOUT_SECONDS", 0.01)
+        client = _FakeAnthropicClient({})
+        client.messages = _HangingMessages()  # type: ignore
+        port = AnthropicJudgePort(client)  # type: ignore
+
+        with pytest.raises(TimeoutError):
+            await port.judge("answer", uow_term)
+
+    @pytest.mark.asyncio
+    async def test_stream_rationale_times_out_on_a_hung_stream(
+        self, uow_term: Term, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(llm_judge, "LLM_TIMEOUT_SECONDS", 0.01)
+        client = _FakeAnthropicClient({})
+        client.messages = _HangingMessages()  # type: ignore
+        port = AnthropicJudgePort(client)  # type: ignore
+
+        with pytest.raises(TimeoutError):
+            async for _ in port.stream_rationale("answer", uow_term):
+                pass
 
 
 class TestDelimiterEscaping:
