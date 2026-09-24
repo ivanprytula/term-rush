@@ -73,9 +73,13 @@ def _materialize_enrich_dedup(
     manifest_candidates: tuple[TermCandidate, ...],
     adr_candidates: tuple[TermCandidate, ...],
     class_candidates: tuple[TermCandidate, ...] = (),
-) -> list[TermCandidate]:
-    """Materialize enriched_candidates against fake upstream assets,
-    recording which TermCandidate each enrich() call received.
+    curated_pairs: tuple[tuple[EnrichedTerm, TermCandidate], ...] = (),
+) -> tuple[list[TermCandidate], tuple[tuple[EnrichedTerm, TermCandidate], ...]]:
+    """Materialize enriched_candidates against fake upstream assets and a
+    stubbed curated-source loader (defaults to empty, so these tests
+    never depend on the real curated_terms.yaml). Returns which
+    TermCandidate each enrich() call received, and the asset's full
+    output.
     """
 
     @dg.asset(dagster_type=dg.Any, name="dependency_manifest_candidates")  # type: ignore
@@ -104,6 +108,9 @@ def _materialize_enrich_dedup(
         )
 
     monkeypatch.setattr(AnthropicEnricher, "enrich", _fake_enrich)
+    monkeypatch.setattr(
+        "pipeline_service.assets.enriched.load_curated_terms", lambda: curated_pairs
+    )
 
     result = dg.materialize(
         [
@@ -114,7 +121,7 @@ def _materialize_enrich_dedup(
         ]
     )
     assert result.success
-    return enrich_calls
+    return enrich_calls, result.output_for_node("enriched_candidates")
 
 
 def test_enrich_asset_dedupes_a_term_named_by_two_sources(
@@ -134,7 +141,7 @@ def test_enrich_asset_dedupes_a_term_named_by_two_sources(
         confidence=Confidence.MEDIUM,
     )
 
-    enrich_calls = _materialize_enrich_dedup(
+    enrich_calls, _ = _materialize_enrich_dedup(
         monkeypatch, (manifest_candidate,), (adr_candidate,)
     )
 
@@ -168,7 +175,7 @@ def test_enrich_asset_dedup_keeps_higher_confidence_even_when_seen_last(
         confidence=Confidence.HIGH,
     )
 
-    enrich_calls = _materialize_enrich_dedup(
+    enrich_calls, _ = _materialize_enrich_dedup(
         monkeypatch, (low_confidence,), (high_confidence,)
     )
 
@@ -190,7 +197,7 @@ def test_enrich_asset_includes_the_class_name_source(
         confidence=Confidence.MEDIUM,
     )
 
-    enrich_calls = _materialize_enrich_dedup(monkeypatch, (), (), (class_candidate,))
+    enrich_calls, _ = _materialize_enrich_dedup(monkeypatch, (), (), (class_candidate,))
 
     assert enrich_calls == [class_candidate]
 
@@ -220,7 +227,7 @@ def test_enrich_asset_dedup_spans_all_three_sources(
         confidence=Confidence.HIGH,
     )
 
-    enrich_calls = _materialize_enrich_dedup(
+    enrich_calls, _ = _materialize_enrich_dedup(
         monkeypatch,
         (highest_confidence,),
         (lower_confidence,),
@@ -228,6 +235,76 @@ def test_enrich_asset_dedup_spans_all_three_sources(
     )
 
     assert enrich_calls == [highest_confidence]
+
+
+def test_enrich_asset_merges_curated_pairs_without_calling_the_llm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A curated (EnrichedTerm, TermCandidate) pair reaches the asset's
+    output directly - no enrich() call, since a human already wrote it.
+    """
+    curated_term = EnrichedTerm(
+        id="gil",
+        term="GIL",
+        expansion="Global Interpreter Lock",
+        definitions=("A definition.",),
+        categories=("python-internals",),
+        difficulty=3,
+    )
+    curated_candidate = TermCandidate(
+        name="GIL",
+        source_type=SourceType.CURATED,
+        source_file="curated_terms.yaml",
+        confidence=Confidence.CURATED,
+    )
+
+    enrich_calls, output = _materialize_enrich_dedup(
+        monkeypatch, (), (), (), ((curated_term, curated_candidate),)
+    )
+
+    assert enrich_calls == []
+    assert output == ((curated_term, curated_candidate),)
+
+
+def test_enrich_asset_curated_wins_over_an_extracted_duplicate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A term named by both the curated source and an extracted source
+    keeps the curated entry - CURATED outranks every extracted
+    confidence level, and the extracted duplicate never reaches
+    enrich().
+    """
+    curated_term = EnrichedTerm(
+        id="gil",
+        term="GIL",
+        expansion="Global Interpreter Lock",
+        definitions=("Hand-written definition.",),
+        categories=("python-internals",),
+        difficulty=3,
+    )
+    curated_candidate = TermCandidate(
+        name="GIL",
+        source_type=SourceType.CURATED,
+        source_file="curated_terms.yaml",
+        confidence=Confidence.CURATED,
+    )
+    extracted_duplicate = TermCandidate(
+        name="gil",  # normalizes to the same key as "GIL"
+        source_type=SourceType.DEPENDENCY_MANIFEST,
+        source_file="pyproject.toml",
+        confidence=Confidence.HIGH,
+    )
+
+    enrich_calls, output = _materialize_enrich_dedup(
+        monkeypatch,
+        (extracted_duplicate,),
+        (),
+        (),
+        ((curated_term, curated_candidate),),
+    )
+
+    assert enrich_calls == []
+    assert output == ((curated_term, curated_candidate),)
 
 
 def test_validate_asset_rejects_a_term_that_fails_a_contract() -> None:
