@@ -1,11 +1,11 @@
-"""Extract candidate terms from PDF documents in the intake directory
+"""Extract candidate terms from intake documents, any registered format
 (ADR-0018's document/OCR source, Low confidence).
 
 Secondary consumer of document ingestion (ADR-0018): the primary output is
 the chunked RAG corpus (document_ingestion.chunking); this extractor pulls
-capitalized/acronym-shaped tokens out of the same OCR'd text the same way
-adr_headings.py pulls identifier-shaped spans - free text has no backtick
-convention, so token shape is the only signal available.
+capitalized/acronym-shaped tokens out of the same extracted text the same
+way adr_headings.py pulls identifier-shaped spans - free text has no
+backtick convention, so token shape is the only signal available.
 """
 
 from __future__ import annotations
@@ -16,8 +16,10 @@ from pathlib import Path
 from pipeline_service.candidate import Confidence
 from pipeline_service.candidate import SourceType
 from pipeline_service.candidate import TermCandidate
-from pipeline_service.document_ingestion.document_text import extract_text_from_document
-from pipeline_service.document_ingestion.document_text import find_intake_documents
+from pipeline_service.document_ingestion.document_sources import (
+    extract_text_from_document,
+)
+from pipeline_service.document_ingestion.document_sources import find_intake_documents
 
 __all__ = [
     "extract_document_sources",
@@ -68,7 +70,8 @@ _SENTENCE_STARTERS = frozenset(
 
 
 def extract_from_document(path: Path) -> tuple[TermCandidate, ...]:
-    """Parse one PDF into candidates, one per distinct capitalized token."""
+    """Parse one document into candidates, one per distinct capitalized
+    token."""
     text = extract_text_from_document(path)
 
     candidates: dict[str, TermCandidate] = {}
@@ -89,9 +92,9 @@ def extract_from_document(path: Path) -> tuple[TermCandidate, ...]:
 
 
 def extract_document_sources(intake_dir: Path) -> tuple[TermCandidate, ...]:
-    """Extract candidates from every PDF in the intake directory,
-    deduplicated by name (a term appearing in multiple documents yields
-    one candidate, keeping the first document it was seen in).
+    """Extract candidates from every intake document (any registered
+    format), deduplicated by name (a term appearing in multiple documents
+    yields one candidate, keeping the first document it was seen in).
     """
     seen: dict[str, TermCandidate] = {}
     for path in find_intake_documents(intake_dir):
