@@ -176,9 +176,11 @@ using one.
 
 | Facet | Status | Where |
 | --- | --- | --- |
-| MCP server | ⏳ P3 | Term Rush exposes term bank + player progress as an MCP server — Claude Code (or any MCP client) can query it. `MCP` is a term in the game. Not yet implemented. |
-| Tool-use loop | ✅ P3 | Content authoring pipeline: Dagster extracts dependencies → LLM enriches → validates against schema → loads → human review queue. Real structured tool calls (Claude API, schema-constrained output). `content-pipeline/` services. Verified E2E with multiple sources (dependency-manifest, ADR headings, Python class names, curated YAML). |
+| MCP server | ⏳ P3 | ADR-0020: `fastapi-mcp` auto-generates tools from existing routers (`get_random_term`, `get_term_categories`, `get_term_stats`, `search_document_chunks`, `list_review_candidates`) — read-only by default. Mutating tools (`approve_review_candidate`, `reject_review_candidate`) are tagged separately and deliberately withheld from any agent client — approval stays human-only. Decision recorded, no code yet. |
+| Tool-use loop | ✅ P3 | Content authoring pipeline: Dagster extracts dependencies → LLM enriches → validates against schema → loads → human review queue. Real structured tool calls (Claude API, schema-constrained output). `content-pipeline/` services. Verified E2E with multiple sources (dependency-manifest, ADR headings, Python class names, curated YAML). This is a fixed-control-flow *workflow* (Anthropic's term), not an agent — see the next row for the distinction. |
+| Agent orchestration (LangGraph) | ⏳ L0 | ADR-0019: new `agentic_review_candidates` Dagster asset, a LangGraph graph (retrieve → draft → critique, bounded critique-loop) where the model — not fixed Python — decides whether another retrieval pass is needed. Checkpointing + human-in-the-loop interrupt feeding the existing review queue. Not started; decision recorded, no code yet. |
 | Human-in-the-loop | ✅ P3 | Generated terms land in review-queue endpoint (`GET /api/review-queue`, `PATCH .../approve-or-reject`). Review UI + API prevent unreviewed terms from reaching live. content-service persists in database until approval. |
+| Audit trail for agent actions | ⏳ P3 | ADR-0021: extends `EventEnvelope` (ADR-0011) with an `actor` field (`human`/`agent`/`system`, version-carrying agent ids); a fourth Kafka consumer, same TaskGroup-supervised pattern as `answer_graded_stats`, persists every audit-relevant event to an append-only `agent_audit_log` table. `GET /audit-log` query surface. Not started; decision recorded, no code yet. |
 | Eval harness | ⏳ P3 | Not yet implemented. Golden set of terms; scoring agent output against schema. Prevents prompt-change regressions. Deferred. |
 
 ### Vector databases and embedding pipelines
@@ -262,7 +264,7 @@ Each session deepens one or two focus areas, moving items from L1→L2→L3→L4
 | Focus | Current | Next step | Why |
 | --- | --- | --- | --- |
 | RAG pipeline | L2 (embed, retrieve, ground the judge, Recall@k eval shipped) | Hybrid search (vector + keyword) if keyword-only misses turn out common; format-agnostic ingestion already covers PDF/txt/md/docx | Differentiator: most RAG projects never measure retrieval quality — this one does, in CI |
-| Agentic workflows | L1 (pipeline exists) | Eval harness with golden term set; prevent prompt-change regressions | Agents without measurement are demos, not systems |
+| Agentic workflows | L1 (tool-use workflow) / L0 (real agent loop) | Build ADR-0019's LangGraph slice; then an eval harness with golden term set to prevent prompt-change regressions | Agents without measurement are demos, not systems — but there's no agent loop to measure yet, only a fixed pipeline |
 | Vector databases | L2 (pgvector in production use, no index yet) | Measure vector search latency vs keyword at current scale; add HNSW/IVFFlat once corpus size justifies it (ADR-0012) | Clarifies when pgvector stays (stays) vs when Pinecone enters |
 | Prompt versioning | L1 (in-repo) | Add CI checks for prompt drift; snapshot tests on fixed input set | Prompts are code; treat as such |
 | Cost estimation | L0 | Back-of-envelope: tokens/request, requests/session, LLM cost/MAU at scale | Matters for pitch; LLM-heavy projects need this number |
@@ -335,8 +337,8 @@ Use this to quickly assess whether Term Rush covers a role's expectations or to 
 | "Prompt injection defense" | Delimiter escaping (generalized per-tag: `student_answer` and `retrieved_context`), instruction hierarchy, output schema validation, bounds-clamping — ADR-0013 | L2 | Adversarial test cases; red-team the grader |
 | "RAG / semantic search" | Document-chunk corpus (pgvector, ONNX embeddings), `GET /document-chunks/search` on both services, grounds the LLM judge's grading prompt, Recall@k eval in CI — ADR-0012 | L2 | Hybrid search (vector + keyword); HNSW/IVFFlat index once corpus size justifies it |
 | "Cost + latency control" | LLM calls only on Boss Round (1 per 10 answers); in-memory grade cache | L1 | Measure cache hit rate; cost per session; model tiering strategy |
-| "Agentic workflows / tool use" | Dagster pipeline: extract → enrich → validate → load → review queue | L2 | Eval harness (golden terms); prevent prompt-change regressions |
-| "Human-in-the-loop workflows" | Review queue endpoint (GET, PATCH approve/reject); terms persist until approval | L2 | UI for human review; audit trail of decisions |
+| "Agentic workflows / tool use" | Dagster pipeline: extract → enrich → validate → load → review queue (fixed-control-flow workflow) — ADR-0019 adds a real agent loop (LangGraph, model-directed retrieval) on top | L2 (workflow) / L0 (agent) | Build ADR-0019; eval harness (golden terms) once it ships |
+| "Human-in-the-loop workflows" | Review queue endpoint (GET, PATCH approve/reject); terms persist until approval | L2 | UI for human review; audit trail of decisions — ADR-0021 (extends `EventEnvelope` + a Kafka consumer into an append-only log), not started |
 
 ### Architecture / System Design
 
