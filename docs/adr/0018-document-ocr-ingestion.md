@@ -6,6 +6,24 @@
   from documents stays available but secondary, see below), ADR-0012
   (pgvector for this corpus, once Slice 2 ships)
 
+**Update, 2026-09-27:** the "second document format" trigger in *When I
+would change this* fired - `document_sources.py` replaced the PDF-only
+`document_text.py` with a `DocumentSource` registry keyed by extension
+(`PdfSource`, `PlainTextSource` for `.txt`/`.md`). `find_intake_documents`
+and `extract_text_from_document` kept their signatures, so every
+downstream consumer (chunking, the Dagster assets, content-service's
+chunk store) needed zero changes - confirming the seam this ADR's Slice 1
+already isolated the format-specificity to was the right one. Adding a
+third format is now a one-file change: register a new `DocumentSource`.
+
+**Update, 2026-09-27 (later the same day):** a third format landed,
+proving that claim - `DocxSource` (python-docx, paragraph text joined in
+document order) registered alongside the other two, no changes anywhere
+else in `document_ingestion/`. Table/header/footer extraction is a known
+gap, not a silent one: plain body paragraphs cover the common case
+(a written contract or report), and a document whose content lives mainly
+in tables would need that extended.
+
 ## Context
 
 Every extraction source in ADR-0004 is repo-native: dependency manifests, ADR
@@ -38,8 +56,11 @@ provenance. That chunk store is the primary deliverable. Term-candidate
 extraction (`document_ocr.py`, unchanged) remains a secondary, optional
 consumer of the same OCR'd text.**
 
-- Intake is `docs/source-documents/` - a directory populated by hand, not a
-  repo-wide glob. Bounded, deliberate, reviewable - unchanged from v1.
+- Intake is `intake/documents/` (`DOCUMENT_INTAKE_DIR`) - a directory
+  populated by hand, not a repo-wide glob. Bounded, deliberate, reviewable -
+  unchanged from v1. Kept out of `docs/`, which is markdown-only; this
+  holds the raw source files (PDFs, `.txt`, `.md`) that get ingested, not
+  documentation about the project.
 - OCR: `pypdf` text-layer extraction first, `pytesseract` + `pdf2image` as
   the scanned-page fallback - unchanged from v1. This logic is factored into
   a shared `extract_text_from_document()` so both consumers (chunking,
@@ -127,9 +148,10 @@ generation layer, once there's a real corpus to ground it in.
 - If Slice 1's chunk store proves to have real query patterns that keyword
   search satisfies fine, Slice 2 (embeddings) may not be worth building -
   that's a legitimate outcome, not a failure to reach it.
-- If a second document format is genuinely needed (DOCX contracts, HTML
+- ~~If a second document format is genuinely needed (DOCX contracts, HTML
   exports), generalize the OCR/chunking interface then - not speculatively
-  now.
+  now.~~ Done 2026-09-27, see Update above. A third format (DOCX, HTML)
+  is the next time this trigger matters.
 - If handwritten-document ingestion becomes the actual target, that is a
   distinct extractor with its own accuracy story, not a silent extension of
   this one.
