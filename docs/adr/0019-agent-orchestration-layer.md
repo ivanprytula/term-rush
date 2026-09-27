@@ -83,9 +83,14 @@ Concretely, one new slice:
   infrastructure for infrastructure's sake" stance from ADR-0012 -
   Postgres-backed checkpointing if/when this leaves prototype).
 - **Human-in-the-loop interrupt** before the graph's output reaches the
-  review queue - reusing the existing `GET /api/review-queue` /
-  `PATCH .../approve-or-reject` endpoints (ADR-0004), not a new approval
-  mechanism. The graph halts, the existing queue is where a human sees it.
+  review queue - reusing the existing `GET /review-queue` /
+  `POST /review-queue/{id}/approve` / `POST /review-queue/{id}/reject`
+  endpoints (ADR-0004), not a new approval mechanism or LangGraph's
+  `interrupt()`/`Command` resume primitive: the graph's terminal node
+  submits the draft as PENDING and the run ends there. Approval/rejection
+  happens out-of-band, through the review-queue UI, on a different code
+  path entirely - there is nothing to resume, since the queue's own
+  PENDING state is the durable halt point.
 - **Tool-input hardening**: any tool the graph exposes to the model
   (pgvector search, repo grep) gets the same treatment ADR-0013 already
   established for player answers - the model's tool-call arguments are
