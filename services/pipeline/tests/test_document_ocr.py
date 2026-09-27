@@ -1,6 +1,6 @@
 """Tests for the document/OCR term-candidate extractor (ADR-0018,
-secondary consumer of document ingestion - see test_document_text.py for
-the shared OCR mechanics).
+secondary consumer of document ingestion - see test_document_sources.py for
+the shared extraction mechanics).
 """
 
 from __future__ import annotations
