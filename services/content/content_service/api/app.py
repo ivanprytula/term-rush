@@ -6,6 +6,7 @@ from fastapi import Request
 from fastapi import status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi_mcp import FastApiMCP
 
 from content_service.api import dependencies
 from content_service.api.config import settings
@@ -59,6 +60,17 @@ app = FastAPI(title="Term Rush — content service", lifespan=lifespan)
 app.include_router(terms.router)
 app.include_router(review_queue.router)
 app.include_router(document_chunks.router)
+
+# MCP server (ADR-0020): read-only tools only. Mutating review-queue
+# operations (approve/reject) are deliberately withheld until real auth
+# exists to gate them the same way the REST API would - exposing them
+# unauthenticated would let any MCP client approve/reject candidates.
+mcp = FastApiMCP(
+    app,
+    name="Term Rush content service",
+    include_operations=["list_review_candidates", "search_document_chunks"],
+)
+mcp.mount_http()
 
 
 @app.get("/health")

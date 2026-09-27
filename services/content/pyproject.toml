@@ -23,6 +23,12 @@ dependencies = [
   # model, ~50-100MB of deps instead of torch's ~1GB (CPU wheel) — see
   # sentence_transformer_embedder.py's replacement, onnx_embedder.py.
   "fastembed>=0.4",
+  "fastapi-mcp>=0.4",
+  # fastapi-mcp==0.4.0 targets the mcp SDK's 1.x API (Server.__init__ took a
+  # third notification_options arg, dropped in mcp 2.x) - pin below 2.0 until
+  # fastapi-mcp itself catches up. See ADR-0020's stated risk: this project
+  # inherits fastapi-mcp's upgrade lag rather than controlling its own.
+  "mcp<2.0",
 ]
 
 [tool.uv.sources]
