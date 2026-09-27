@@ -1,0 +1,42 @@
+The descriptor protocol is the mechanism that lets an object customize what
+happens when it is accessed as an attribute of another class. A descriptor
+is any object whose class defines one or more of __get__, __set__, or
+__delete__. When Python looks up an attribute on an instance and finds a
+descriptor in the class's dictionary, it calls the descriptor's method
+instead of returning the object directly from __dict__.
+
+This protocol is the foundation underneath several features that look like
+built-in language magic but are actually ordinary Python objects following
+this convention. The property built-in is a descriptor: writing
+obj.x when x is defined as a property does not do a plain dictionary lookup,
+it calls type(obj).__dict__['x'].__get__(obj, type(obj)), which runs the
+getter function you wrote. staticmethod and classmethod are also
+descriptors, which is how they intercept the normal instance-binding
+behavior of functions to either drop the instance argument entirely or
+replace it with the class.
+
+Descriptors come in two flavors: data descriptors, which define __set__ or
+__delete__ in addition to __get__, and non-data descriptors, which only
+define __get__. This distinction matters for attribute lookup priority. A
+data descriptor on the class always takes precedence over an instance
+attribute of the same name, even if the instance's __dict__ has an entry
+for it. A non-data descriptor, by contrast, is overridden if the instance
+has its own entry in __dict__. This is exactly the rule that makes plain
+functions work as bound methods: a function is a non-data descriptor, so an
+instance attribute of the same name would shadow it, but ordinarily nothing
+does.
+
+Object-relational mappers rely heavily on the descriptor protocol to
+implement typed, validated fields on model classes. A column definition in
+an ORM model is typically a descriptor whose __set__ validates the assigned
+value's type or coerces it, and whose __get__ returns the stored value or
+lazily loads it from the database. Understanding descriptors is what
+separates "I know property exists" from "I understand why property and
+ORM field types behave the way they do at the attribute-lookup level."
+
+A frequent mistake is treating a descriptor as though it were a per-instance
+attribute. Descriptors live on the class, not on any particular instance, so
+the same __get__ and __set__ methods run for every instance of that class;
+any per-instance state a descriptor needs has to be stored somewhere the
+descriptor itself manages, commonly a dictionary keyed by instance identity,
+not as a plain attribute on the descriptor object.

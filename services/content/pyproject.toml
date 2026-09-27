@@ -18,6 +18,11 @@ dependencies = [
   "term-proto",
   "termrush-core",
   "aiokafka>=0.12",
+  "pgvector>=0.3.6",
+  # ONNX runtime, not sentence-transformers/torch: same all-MiniLM-L6-v2
+  # model, ~50-100MB of deps instead of torch's ~1GB (CPU wheel) — see
+  # sentence_transformer_embedder.py's replacement, onnx_embedder.py.
+  "fastembed>=0.4",
 ]
 
 [tool.uv.sources]

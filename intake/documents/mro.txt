@@ -1,0 +1,39 @@
+The Method Resolution Order, MRO, is the specific, linearized sequence
+Python follows when it searches a class hierarchy for an attribute or
+method. Whenever code accesses obj.method(), and method is not defined
+directly on type(obj), Python walks the MRO in order, checking each class
+in turn until it finds the attribute or exhausts the list and raises an
+AttributeError. The full order for any class is available at
+type(obj).__mro__ and is computed once, at class creation time, not
+re-derived on every lookup.
+
+For a class with single inheritance, the MRO is unsurprising: the class
+itself, then its parent, then the parent's parent, and so on up to object.
+The interesting behavior appears with multiple inheritance, where naively
+walking "left parent first, depth first" can produce an order that is
+inconsistent or even contradicts the order the programmer declared the base
+classes in. CPython solves this with the C3 linearization algorithm, which
+guarantees three properties: a class always appears before its base
+classes, the order respects the order bases were listed in the class
+definition, and the result is consistent across the whole hierarchy, meaning
+no subclass can force an order that violates what a shared base class
+already established elsewhere.
+
+The MRO is also what super() actually uses, which is a common source of
+confusion. Many people assume super().method() calls "the immediate parent
+class's method," but that is only true for single inheritance. What
+super() actually does is call the next class in the MRO after the current
+one, which in a multiple-inheritance diamond can be a sibling class rather
+than a direct parent. This is precisely the mechanism that makes cooperative
+multiple inheritance work: every class in a diamond calls super() and lets
+the MRO decide who runs next, rather than each class hardcoding a call to a
+specific named parent class.
+
+A classic failure mode is writing a mixin class that inherits from a
+specific concrete class instead of from object, assuming that will always
+put it "above" that class in the hierarchy. If a different combination of
+mixins produces an MRO where C3 linearization cannot satisfy all the
+declared orderings simultaneously, Python raises a TypeError at class
+creation time rather than silently picking an order, which is the language
+protecting against exactly the ambiguity that ad hoc depth-first search
+would otherwise hide.

@@ -54,6 +54,11 @@ class TermServiceStub:
                 request_serializer=term__pb2.ListTermIdsRequest.SerializeToString,
                 response_deserializer=term__pb2.ListTermIdsReply.FromString,
                 _registered_method=True)
+        self.SearchChunks = channel.unary_unary(
+                '/termrush.content.v1.TermService/SearchChunks',
+                request_serializer=term__pb2.SearchChunksRequest.SerializeToString,
+                response_deserializer=term__pb2.SearchChunksReply.FromString,
+                _registered_method=True)
 
 
 class TermServiceServicer:
@@ -83,6 +88,16 @@ class TermServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SearchChunks(self, request, context):
+        """ADR-0012 Slice 2: semantic search over the document-chunk RAG corpus,
+        for grounding the LLM judge's grading context. Same internal,
+        latency-sensitive hop as term lookup (ADR-0009) - one protocol between
+        game-service and content-service, not a second HTTP dependency.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_TermServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -105,6 +120,11 @@ def add_TermServiceServicer_to_server(servicer, server):
                     servicer.ListTermIds,
                     request_deserializer=term__pb2.ListTermIdsRequest.FromString,
                     response_serializer=term__pb2.ListTermIdsReply.SerializeToString,
+            ),
+            'SearchChunks': grpc.unary_unary_rpc_method_handler(
+                    servicer.SearchChunks,
+                    request_deserializer=term__pb2.SearchChunksRequest.FromString,
+                    response_serializer=term__pb2.SearchChunksReply.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -215,6 +235,33 @@ class TermService:
             '/termrush.content.v1.TermService/ListTermIds',
             term__pb2.ListTermIdsRequest.SerializeToString,
             term__pb2.ListTermIdsReply.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SearchChunks(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/termrush.content.v1.TermService/SearchChunks',
+            term__pb2.SearchChunksRequest.SerializeToString,
+            term__pb2.SearchChunksReply.FromString,
             options,
             channel_credentials,
             insecure,

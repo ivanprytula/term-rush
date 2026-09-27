@@ -1,0 +1,33 @@
+The Global Interpreter Lock, GIL, is a mutex that protects access to Python
+objects, preventing multiple native threads from executing Python bytecodes
+at once within a single process. This lock exists because CPython's memory
+management is not thread-safe: reference counts on objects are incremented
+and decremented constantly as objects are created, passed around, and
+destroyed, and without a lock, two threads could race on the same object's
+refcount and corrupt it, leading to premature garbage collection or memory
+leaks.
+
+The practical consequence is that a CPU-bound multithreaded Python program
+rarely runs faster than its single-threaded equivalent, because only one
+thread can hold the GIL and execute bytecode at any given instant. Adding
+more threads to a tight numerical loop does not parallelize the work across
+cores; it just adds the overhead of thread switching on top of the same
+serialized execution. Multiprocessing sidesteps the GIL entirely by running
+separate Python interpreter processes, each with its own GIL, communicating
+through pickling and inter-process channels rather than shared memory.
+
+Threads still help for I/O-bound work. When a thread calls a blocking
+operation like a network read or a file write, CPython releases the GIL for
+the duration of that call, letting another thread run. This is why a
+web-scraping script with many threads waiting on sockets can see real
+speedups, while a thread pool crunching matrix multiplications in pure
+Python sees essentially none. Extension modules written in C, such as
+NumPy's core routines, can also release the GIL explicitly during long
+computations, which is part of why NumPy-heavy code can benefit from
+threading even though pure Python cannot.
+
+A common misconception is that the GIL makes Python's threading module
+useless. It is more precise to say the GIL makes threading useless for
+CPU-bound parallelism specifically, while leaving it fully useful for
+concurrency in the I/O-bound case, which is by far the more common one in
+practice for things like web servers and API clients.

@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 
+from game_service.domain.chunk_search import RetrievedChunk
 from game_service.domain.llm_grader import LLMJudgment
 from game_service.domain.llm_grader import LLMRubricGrader
 from game_service.domain.outcome import MatchedVia
@@ -39,12 +40,29 @@ def uow_term() -> Term:
 class FakeJudgePort:
     def __init__(self, judgment: LLMJudgment) -> None:
         self._judgment = judgment
+        self.last_context: tuple[RetrievedChunk, ...] | None = None
 
-    async def judge(self, answer: str, term: Term) -> LLMJudgment:
+    async def judge(
+        self, answer: str, term: Term, context: tuple[RetrievedChunk, ...] = ()
+    ) -> LLMJudgment:
+        self.last_context = context
         return self._judgment
 
-    async def stream_rationale(self, answer: str, term: Term) -> AsyncIterator[str]:
+    async def stream_rationale(
+        self, answer: str, term: Term, context: tuple[RetrievedChunk, ...] = ()
+    ) -> AsyncIterator[str]:
+        self.last_context = context
         yield self._judgment.rationale
+
+
+class FakeChunkSearch:
+    def __init__(self, chunks: tuple[RetrievedChunk, ...] = ()) -> None:
+        self._chunks = chunks
+        self.last_query: str | None = None
+
+    async def search(self, query: str, top_k: int) -> tuple[RetrievedChunk, ...]:
+        self.last_query = query
+        return self._chunks
 
 
 class TestLLMRubricGrader:
@@ -124,6 +142,70 @@ class TestLLMRubricGrader:
         outcome = await LLMRubricGrader(FakeJudgePort(judgment)).grade("", uow_term)
 
         assert outcome is not None
+
+    @pytest.mark.asyncio
+    async def test_grade_retrieves_context_keyed_on_the_term(
+        self, uow_term: Term
+    ) -> None:
+        """ADR-0012 Slice 2: the retrieval query is the term itself, not the
+        player's answer — deterministic per term, independent of answer
+        quality."""
+        judgment = LLMJudgment(
+            concept=40, expansion=30, purpose=20, example=10, rationale="Nailed it."
+        )
+        chunk_search = FakeChunkSearch()
+
+        await LLMRubricGrader(FakeJudgePort(judgment)).grade(
+            "a weak, off-topic answer", uow_term, chunk_search
+        )
+
+        assert chunk_search.last_query == "UoW Unit of Work"
+
+    @pytest.mark.asyncio
+    async def test_grade_forwards_retrieved_context_to_the_judge(
+        self, uow_term: Term
+    ) -> None:
+        judgment = LLMJudgment(
+            concept=40, expansion=30, purpose=20, example=10, rationale="Nailed it."
+        )
+        judge = FakeJudgePort(judgment)
+        chunks = (RetrievedChunk(text="about UoW", source_file="patterns.txt"),)
+        chunk_search = FakeChunkSearch(chunks)
+
+        await LLMRubricGrader(judge).grade("answer", uow_term, chunk_search)
+
+        assert judge.last_context == chunks
+
+    @pytest.mark.asyncio
+    async def test_grade_passes_empty_context_when_chunk_search_unconfigured(
+        self, uow_term: Term
+    ) -> None:
+        judgment = LLMJudgment(
+            concept=40, expansion=30, purpose=20, example=10, rationale="Nailed it."
+        )
+        judge = FakeJudgePort(judgment)
+
+        await LLMRubricGrader(judge).grade("answer", uow_term, chunk_search=None)
+
+        assert judge.last_context == ()
+
+    @pytest.mark.asyncio
+    async def test_stream_rationale_forwards_retrieved_context(
+        self, uow_term: Term
+    ) -> None:
+        judgment = LLMJudgment(
+            concept=40, expansion=30, purpose=20, example=10, rationale="Nailed it."
+        )
+        judge = FakeJudgePort(judgment)
+        chunks = (RetrievedChunk(text="about UoW", source_file="patterns.txt"),)
+        chunk_search = FakeChunkSearch(chunks)
+
+        async for _ in LLMRubricGrader(judge).stream_rationale(
+            "answer", uow_term, chunk_search
+        ):
+            pass
+
+        assert judge.last_context == chunks
 
 
 class TestLLMJudgmentValidation:

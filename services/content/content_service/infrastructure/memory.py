@@ -17,6 +17,19 @@ from content_service.domain.review import ReviewStatus
 from content_service.domain.term import Term
 
 
+def _cosine_distance(a: tuple[float, ...], b: tuple[float, ...]) -> float:
+    """1 - cosine similarity, matching pgvector's <=> operator (0 =
+    identical, up to 2 = opposite) — kept in step with
+    SQLDocumentChunkRepository.search_by_similarity's ORDER BY so both
+    adapters rank the same way for the same vectors."""
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(y * y for y in b) ** 0.5
+    if norm_a == 0 or norm_b == 0:
+        return 1.0
+    return 1.0 - dot / (norm_a * norm_b)
+
+
 class InMemoryTermRepository(TermRepository):
     """Store terms in a dict."""
 
@@ -119,6 +132,26 @@ class InMemoryDocumentChunkRepository(DocumentChunkRepository):
         ]
         for chunk_id in stale_ids:
             del self.chunks[chunk_id]
+
+    async def unembedded(self, limit: int) -> tuple[DocumentChunk, ...]:
+        matching = [c for c in self.chunks.values() if c.embedding is None]
+        return tuple(sorted(matching, key=lambda c: c.id or 0)[:limit])
+
+    async def set_embedding(self, chunk_id: int, embedding: tuple[float, ...]) -> None:
+        existing = self.chunks.get(chunk_id)
+        if existing is not None:
+            self.chunks[chunk_id] = existing.model_copy(update={"embedding": embedding})
+
+    async def search_by_similarity(
+        self, query_embedding: tuple[float, ...], top_k: int
+    ) -> tuple[DocumentChunk, ...]:
+        scored = [
+            (c, _cosine_distance(c.embedding, query_embedding))
+            for c in self.chunks.values()
+            if c.embedding is not None
+        ]
+        scored.sort(key=lambda pair: pair[1])
+        return tuple(chunk for chunk, _ in scored[:top_k])
 
 
 class InMemoryEventPublisher(EventPublisher):

@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -263,6 +264,7 @@ def _chunk_to_domain(model: DocumentChunkModel) -> DocumentChunk:
         chunk_index=model.chunk_index,
         char_start=model.char_start,
         char_end=model.char_end,
+        embedding=tuple(model.embedding) if model.embedding is not None else None,
     )
 
 
@@ -282,6 +284,9 @@ class SQLDocumentChunkRepository(DocumentChunkRepository):
                 chunk_index=chunk.chunk_index,
                 char_start=chunk.char_start,
                 char_end=chunk.char_end,
+                embedding=list(chunk.embedding)
+                if chunk.embedding is not None
+                else None,
             )
             for chunk in chunks
         ]
@@ -303,3 +308,35 @@ class SQLDocumentChunkRepository(DocumentChunkRepository):
             DocumentChunkModel.source_file == source_file
         )
         await self.session.execute(stmt)
+
+    async def unembedded(self, limit: int) -> tuple[DocumentChunk, ...]:
+        stmt = (
+            select(DocumentChunkModel)
+            .where(DocumentChunkModel.embedding.is_(None))
+            .order_by(DocumentChunkModel.id)
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return tuple(_chunk_to_domain(m) for m in result.scalars().all())
+
+    async def set_embedding(self, chunk_id: int, embedding: tuple[float, ...]) -> None:
+        stmt = (
+            update(DocumentChunkModel)
+            .where(DocumentChunkModel.id == chunk_id)
+            .values(embedding=list(embedding))
+        )
+        await self.session.execute(stmt)
+
+    async def search_by_similarity(
+        self, query_embedding: tuple[float, ...], top_k: int
+    ) -> tuple[DocumentChunk, ...]:
+        stmt = (
+            select(DocumentChunkModel)
+            .where(DocumentChunkModel.embedding.is_not(None))
+            .order_by(
+                DocumentChunkModel.embedding.cosine_distance(list(query_embedding))
+            )
+            .limit(top_k)
+        )
+        result = await self.session.execute(stmt)
+        return tuple(_chunk_to_domain(m) for m in result.scalars().all())

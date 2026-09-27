@@ -6,7 +6,9 @@ Pure business logic over ports; independent of Framework/Infrastructure.
 from __future__ import annotations
 
 from content_service.application.ports import UnitOfWork
+from content_service.domain import constants
 from content_service.domain.document_chunk import DocumentChunk
+from content_service.domain.embedding import EmbeddingPort
 from content_service.domain.review import ReviewCandidate
 from content_service.domain.review import ReviewCandidateNotPending
 from content_service.domain.review import ReviewStatus
@@ -138,6 +140,62 @@ class ListDocumentChunksBySource:
     async def execute(self, source_file: str) -> tuple[DocumentChunk, ...]:
         async with self.uow:
             return await self.uow.document_chunks.by_source_file(source_file)
+
+
+class EmbedDocumentChunks:
+    """Embed one batch of not-yet-embedded chunks (ADR-0012 Slice 2).
+
+    Separate from IngestDocumentChunks so embedding failures never block
+    ingestion — a chunk lands keyword-searchable immediately and picks up
+    semantic search on the next successful pass. Designed to be called
+    repeatedly (a scheduled job, or triggered after ingestion) until it
+    returns an empty tuple.
+    """
+
+    def __init__(self, uow: UnitOfWork, embedder: EmbeddingPort) -> None:
+        self.uow = uow
+        self.embedder = embedder
+
+    async def execute(
+        self, batch_size: int = constants.EMBED_BATCH_SIZE
+    ) -> tuple[DocumentChunk, ...]:
+        """Embed up to `batch_size` chunks. Returns the chunks embedded
+        this pass — an empty tuple means the backlog is clear."""
+        async with self.uow:
+            pending = await self.uow.document_chunks.unembedded(batch_size)
+            embedded = []
+            for chunk in pending:
+                assert chunk.id is not None  # persisted chunks always have one
+                vector = tuple(await self.embedder.embed(chunk.text))
+                await self.uow.document_chunks.set_embedding(chunk.id, vector)
+                embedded.append(chunk.model_copy(update={"embedding": vector}))
+            return tuple(embedded)
+
+
+class SearchChunksBySimilarity:
+    """Semantic search over the document-chunk corpus (ADR-0012 Slice 2):
+    the actual RAG retrieval step. Embeds the query text with the same
+    model that embedded the chunks, then ranks by cosine distance.
+
+    Chunks with no embedding yet are invisible to search — they exist
+    (keyword-searchable via ListDocumentChunksBySource) but haven't been
+    indexed. Not a bug: EmbedDocumentChunks is what closes that gap.
+    """
+
+    def __init__(self, uow: UnitOfWork, embedder: EmbeddingPort) -> None:
+        self.uow = uow
+        self.embedder = embedder
+
+    async def execute(
+        self, query: str, top_k: int = constants.SEARCH_DEFAULT_TOP_K
+    ) -> tuple[DocumentChunk, ...]:
+        """The top_k chunks most semantically similar to `query`, closest
+        first."""
+        query_embedding = tuple(await self.embedder.embed(query))
+        async with self.uow:
+            return await self.uow.document_chunks.search_by_similarity(
+                query_embedding, top_k
+            )
 
 
 class SubmitReviewCandidate:

@@ -8,26 +8,39 @@ import pytest
 from fastapi.testclient import TestClient
 
 from content_service.api.app import app
+from content_service.api.dependencies import get_embedder
 from content_service.api.dependencies import get_unit_of_work
 from content_service.domain.term import Category
 from content_service.domain.term import Term
 from content_service.infrastructure.memory import InMemoryUnitOfWork
 
 
+class _FakeEmbedder:
+    """Deterministic stand-in for the real ONNX model — API tests exercise
+    routing/wiring, not embedding quality, and shouldn't pay the model-load
+    cost."""
+
+    async def embed(self, text: str) -> list[float]:
+        return [0.0] * 384
+
+
 def _override_with(uow: InMemoryUnitOfWork) -> Generator[TestClient]:
     """A client whose Unit of Work is pinned to the given in-memory instance.
 
     Overrides get_unit_of_work rather than relying on the real DB fallback,
-    keeping tests independent of DATABASE_URL/lifespan.
+    keeping tests independent of DATABASE_URL/lifespan. Also overrides
+    get_embedder with a fake for the same reason.
     """
 
     async def override_get_unit_of_work():
         yield uow
 
     app.dependency_overrides[get_unit_of_work] = override_get_unit_of_work
+    app.dependency_overrides[get_embedder] = lambda: _FakeEmbedder()
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.pop(get_unit_of_work, None)
+    app.dependency_overrides.pop(get_embedder, None)
 
 
 @pytest.fixture
@@ -351,3 +364,97 @@ def test_list_document_chunks_by_source_empty_when_no_match(
 
     assert response.status_code == 200
     assert response.json()["chunks"] == []
+
+
+def test_embed_pending_chunks_embeds_the_backlog(
+    client_with_empty_uow: TestClient,
+) -> None:
+    client_with_empty_uow.post("/document-chunks", json=_CHUNKS_PAYLOAD)
+
+    response = client_with_empty_uow.post("/document-chunks/embed")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["embedded_count"] == 2
+    assert len(body["embedded_chunk_ids"]) == 2
+
+
+def test_embed_pending_chunks_returns_zero_when_backlog_empty(
+    client_with_empty_uow: TestClient,
+) -> None:
+    response = client_with_empty_uow.post("/document-chunks/embed")
+
+    assert response.status_code == 200
+    assert response.json() == {"embedded_count": 0, "embedded_chunk_ids": []}
+
+
+def test_embed_pending_chunks_is_idempotent_once_backlog_clears(
+    client_with_empty_uow: TestClient,
+) -> None:
+    client_with_empty_uow.post("/document-chunks", json=_CHUNKS_PAYLOAD)
+    client_with_empty_uow.post("/document-chunks/embed")
+
+    second_pass = client_with_empty_uow.post("/document-chunks/embed")
+
+    assert second_pass.json()["embedded_count"] == 0
+
+
+def test_search_chunks_returns_embedded_chunks(
+    client_with_empty_uow: TestClient,
+) -> None:
+    # Ranking correctness is proven at the use-case/repository level
+    # (test_use_cases.py, test_sql_document_chunk_repository.py) with a
+    # fake embedder that returns distinguishable vectors. This fixture's
+    # _FakeEmbedder returns the same vector for everything, so this only
+    # exercises routing/wiring — that search reaches embedded chunks at all.
+    client_with_empty_uow.post("/document-chunks", json=_CHUNKS_PAYLOAD)
+    client_with_empty_uow.post("/document-chunks/embed")
+
+    response = client_with_empty_uow.get(
+        "/document-chunks/search", params={"query": "contract terms"}
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["chunks"]) == 2
+
+
+def test_search_chunks_excludes_unembedded_chunks(
+    client_with_empty_uow: TestClient,
+) -> None:
+    client_with_empty_uow.post("/document-chunks", json=_CHUNKS_PAYLOAD)
+
+    response = client_with_empty_uow.get(
+        "/document-chunks/search", params={"query": "contract terms"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["chunks"] == []
+
+
+def test_search_chunks_respects_top_k(client_with_empty_uow: TestClient) -> None:
+    client_with_empty_uow.post("/document-chunks", json=_CHUNKS_PAYLOAD)
+    client_with_empty_uow.post("/document-chunks/embed")
+
+    response = client_with_empty_uow.get(
+        "/document-chunks/search", params={"query": "contract terms", "top_k": 1}
+    )
+
+    assert len(response.json()["chunks"]) == 1
+
+
+def test_search_chunks_rejects_empty_query(client_with_empty_uow: TestClient) -> None:
+    response = client_with_empty_uow.get(
+        "/document-chunks/search", params={"query": ""}
+    )
+
+    assert response.status_code == 422
+
+
+def test_search_chunks_rejects_top_k_over_the_cap(
+    client_with_empty_uow: TestClient,
+) -> None:
+    response = client_with_empty_uow.get(
+        "/document-chunks/search", params={"query": "x", "top_k": 101}
+    )
+
+    assert response.status_code == 422

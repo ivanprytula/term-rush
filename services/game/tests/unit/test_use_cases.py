@@ -14,8 +14,11 @@ from game_service.application.use_cases import CreateGameRound
 from game_service.application.use_cases import GetNextTerm
 from game_service.application.use_cases import GetRound
 from game_service.application.use_cases import ListTermCategories
+from game_service.application.use_cases import SearchDocumentChunks
 from game_service.application.use_cases import SubmitAnswer
 from game_service.application.use_cases import SubmitAnswerStreaming
+from game_service.domain import constants
+from game_service.domain.chunk_search import RetrievedChunk
 from game_service.domain.llm_grader import LLMJudgment
 from game_service.domain.llm_grader import LLMRubricGrader
 from game_service.domain.outcome import MatchedVia
@@ -501,13 +504,17 @@ class FakeJudgePort:
         self._rationale_chunks = rationale_chunks
         self._error_during_stream = error_during_stream
 
-    async def judge(self, answer: str, term: Term) -> LLMJudgment:
+    async def judge(
+        self, answer: str, term: Term, context: tuple[RetrievedChunk, ...] = ()
+    ) -> LLMJudgment:
         if self._error is not None:
             raise self._error
         assert self._judgment is not None
         return self._judgment
 
-    async def stream_rationale(self, answer: str, term: Term) -> AsyncIterator[str]:
+    async def stream_rationale(
+        self, answer: str, term: Term, context: tuple[RetrievedChunk, ...] = ()
+    ) -> AsyncIterator[str]:
         if self._error is not None and not self._error_during_stream:
             raise self._error
         chunks = self._rationale_chunks or (
@@ -889,3 +896,46 @@ async def test_streaming_term_not_found(uow: InMemoryUnitOfWork) -> None:
     with pytest.raises(ValueError, match="not found"):
         async for _ in use_case.execute("round-1", "nonexistent", "anything"):
             pass
+
+
+class _FakeChunkSearch:
+    """Records the query/top_k it was called with; returns a canned result."""
+
+    def __init__(self, chunks: tuple[RetrievedChunk, ...] = ()) -> None:
+        self.chunks = chunks
+        self.last_query: str | None = None
+        self.last_top_k: int | None = None
+
+    async def search(self, query: str, top_k: int) -> tuple[RetrievedChunk, ...]:
+        self.last_query = query
+        self.last_top_k = top_k
+        return self.chunks
+
+
+@pytest.mark.asyncio
+async def test_search_document_chunks_forwards_query_and_top_k() -> None:
+    chunk_search = _FakeChunkSearch()
+
+    await SearchDocumentChunks(chunk_search).execute("GIL threading", top_k=3)
+
+    assert chunk_search.last_query == "GIL threading"
+    assert chunk_search.last_top_k == 3
+
+
+@pytest.mark.asyncio
+async def test_search_document_chunks_returns_the_ports_results() -> None:
+    expected = (RetrievedChunk(text="about GIL", source_file="gil.txt"),)
+    chunk_search = _FakeChunkSearch(expected)
+
+    results = await SearchDocumentChunks(chunk_search).execute("GIL")
+
+    assert results == expected
+
+
+@pytest.mark.asyncio
+async def test_search_document_chunks_uses_the_default_top_k() -> None:
+    chunk_search = _FakeChunkSearch()
+
+    await SearchDocumentChunks(chunk_search).execute("GIL")
+
+    assert chunk_search.last_top_k == constants.CHUNK_SEARCH_DEFAULT_TOP_K
