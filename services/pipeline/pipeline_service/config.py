@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str | None = None
     CONTENT_SERVICE_URL: str = "http://localhost:8001"
     DOCUMENT_INTAKE_DIR: str = "intake/documents"
+    AGENTIC_REVIEW_CHECKPOINT_DB: str = "agentic_review_checkpoints.sqlite"
 
 
 settings = Settings()  # type: ignore # ty: ignore[unused-ignore-comment]

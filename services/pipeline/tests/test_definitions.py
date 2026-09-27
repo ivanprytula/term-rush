@@ -10,9 +10,15 @@ testing the stage functions directly).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import dagster as dg
 import pytest
 
+from pipeline_service.agentic_review.critique import AgenticCritic
+from pipeline_service.agentic_review.critique import Critique
+from pipeline_service.agentic_review.draft import AgenticDrafter
+from pipeline_service.assets.agentic_review import agentic_review_candidates
 from pipeline_service.assets.candidates import adr_heading_candidates
 from pipeline_service.assets.candidates import class_name_candidates
 from pipeline_service.assets.candidates import dependency_manifest_candidates
@@ -41,6 +47,7 @@ def test_definitions_resolve_every_asset() -> None:
         "enriched_candidates",
         "validated_candidates",
         "loaded_candidates",
+        "agentic_review_candidates",
         "intake_documents",
         "document_chunks",
         "ingested_chunks",
@@ -456,6 +463,78 @@ def test_validate_then_load_chain_submits_the_valid_term(
 
     assert result.success
     assert result.output_for_node("loaded_candidates") == (99,)
+
+
+def test_agentic_review_asset_materializes_off_validated_candidates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """ADR-0019 Slice 4: proves the asset runs the retrieve -> draft ->
+    critique -> submit_for_review graph once per validated candidate,
+    with content-service's HTTP calls and the Anthropic client stubbed
+    (no real content-service or API key needed), checkpointed to a real
+    temp SQLite file. Critique accepts immediately, so no loop.
+    """
+    term = EnrichedTerm(
+        id="good",
+        term="good-term",
+        expansion="A Good Term",
+        definitions=("A definition.",),
+        categories=("theory",),
+        difficulty=2,
+    )
+    candidate = TermCandidate(
+        name="good-term",
+        source_type=SourceType.DEPENDENCY_MANIFEST,
+        source_file="x",
+        confidence=Confidence.HIGH,
+    )
+
+    @dg.asset(dagster_type=dg.Any, name="validated_candidates")  # type: ignore
+    def fake_validated_candidates() -> tuple[tuple[EnrichedTerm, TermCandidate], ...]:
+        return ((term, candidate),)
+
+    async def _fake_search_document_chunks(_client, _url, _query, top_k):  # noqa: ANN001, ANN202, ARG001
+        return ()
+
+    async def _fake_draft(self, candidate, retrieved_chunks):  # noqa: ANN001, ANN202, ARG001
+        return EnrichedTerm(
+            id="good",
+            term=candidate.name,
+            expansion="A Good Term",
+            definitions=("A definition.",),
+            categories=("theory",),
+            difficulty=2,
+        )
+
+    async def _fake_critique(self, candidate, draft, retrieved_chunks):  # noqa: ANN001, ANN202, ARG001
+        return Critique(accept=True, refined_query=None)
+
+    async def _fake_submit_for_review(_client, _url, _term, _candidate) -> int:
+        return 42
+
+    monkeypatch.setattr(
+        "pipeline_service.agentic_review.graph.search_document_chunks",
+        _fake_search_document_chunks,
+    )
+    monkeypatch.setattr(
+        "pipeline_service.agentic_review.graph.submit_for_review",
+        _fake_submit_for_review,
+    )
+    monkeypatch.setattr(
+        "pipeline_service.assets.agentic_review.AsyncAnthropic",
+        lambda **_kwargs: object(),
+    )
+    monkeypatch.setattr(
+        "pipeline_service.assets.agentic_review.settings.AGENTIC_REVIEW_CHECKPOINT_DB",
+        str(tmp_path / "checkpoints.sqlite"),
+    )
+    monkeypatch.setattr(AgenticDrafter, "draft", _fake_draft)
+    monkeypatch.setattr(AgenticCritic, "critique", _fake_critique)
+
+    result = dg.materialize([fake_validated_candidates, agentic_review_candidates])
+
+    assert result.success
+    assert result.output_for_node("agentic_review_candidates") == (42,)
 
 
 def test_document_chunks_then_ingest_chain_submits_the_chunks(
