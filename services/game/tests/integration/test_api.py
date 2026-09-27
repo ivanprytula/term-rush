@@ -13,9 +13,11 @@ from fastapi.testclient import TestClient
 
 from game_service.api import dependencies
 from game_service.api.app import app
+from game_service.api.dependencies import get_chunk_search
 from game_service.api.dependencies import get_term_stats_repository
 from game_service.api.dependencies import get_unit_of_work
 from game_service.domain import constants
+from game_service.domain.chunk_search import RetrievedChunk
 from game_service.domain.outcome import MatchedVia
 from game_service.domain.outcome import Verdict
 from game_service.domain.round import GameRound
@@ -628,5 +630,61 @@ def test_get_leaderboard_rejects_an_unknown_mode(client: TestClient) -> None:
     """The mode query param is enum-typed, so an unknown value 422s before
     the use case ever runs — no repository call needed to test this."""
     response = client.get("/leaderboard", params={"mode": "nonexistent-mode"})
+
+    assert response.status_code == 422
+
+
+class _FakeChunkSearch:
+    def __init__(self, chunks: tuple[RetrievedChunk, ...]) -> None:
+        self._chunks = chunks
+
+    async def search(self, query: str, top_k: int) -> tuple[RetrievedChunk, ...]:
+        return self._chunks
+
+
+@pytest.fixture
+def client_with_chunk_search() -> Generator[TestClient]:
+    chunk_search = _FakeChunkSearch(
+        (RetrievedChunk(text="about the GIL", source_file="gil.txt"),)
+    )
+    app.dependency_overrides[get_chunk_search] = lambda: chunk_search
+    with TestClient(app) as client:
+        yield client
+    app.dependency_overrides.pop(get_chunk_search, None)
+
+
+def test_search_chunks_returns_the_ports_results(
+    client_with_chunk_search: TestClient,
+) -> None:
+    response = client_with_chunk_search.get(
+        "/document-chunks/search", params={"query": "GIL threading"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "chunks": [{"text": "about the GIL", "source_file": "gil.txt"}]
+    }
+
+
+def test_search_chunks_empty_when_chunk_search_unconfigured(client: TestClient) -> None:
+    """No DATABASE_URL in the test environment means get_chunk_search
+    returns None — the endpoint degrades to an empty result, not an error."""
+    response = client.get("/document-chunks/search", params={"query": "anything"})
+
+    assert response.status_code == 200
+    assert response.json() == {"chunks": []}
+
+
+def test_search_chunks_rejects_empty_query(client: TestClient) -> None:
+    response = client.get("/document-chunks/search", params={"query": ""})
+
+    assert response.status_code == 422
+
+
+def test_search_chunks_rejects_top_k_over_the_cap(client: TestClient) -> None:
+    response = client.get(
+        "/document-chunks/search",
+        params={"query": "x", "top_k": constants.CHUNK_SEARCH_MAX_TOP_K + 1},
+    )
 
     assert response.status_code == 422

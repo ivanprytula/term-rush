@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import MetaData
@@ -206,8 +207,10 @@ class ReviewCandidateModel(Base):
 
 
 class DocumentChunkModel(Base):
-    """One persisted chunk of a document's text (ADR-0018 Slice 1: the
-    RAG/analytics corpus, no embeddings yet).
+    """One persisted chunk of a document's text (ADR-0018 Slice 1 chunk
+    store; `embedding` added in Slice 2, ADR-0012 — nullable because
+    ingestion and embedding are separate use cases, so a chunk can exist
+    keyword-searchable before it's ever embedded).
     """
 
     __tablename__ = "document_chunks"
@@ -222,6 +225,9 @@ class DocumentChunkModel(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     char_start: Mapped[int] = mapped_column(Integer, nullable=False)
     char_end: Mapped[int] = mapped_column(Integer, nullable=False)
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(constants.DOCUMENT_CHUNK_EMBEDDING_DIM), nullable=True
+    )
 
     __table_args__ = (
         UniqueConstraint(

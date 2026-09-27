@@ -12,6 +12,9 @@ from datetime import datetime
 from hashlib import sha256
 
 from game_service.application.ports import UnitOfWork
+from game_service.domain import constants
+from game_service.domain.chunk_search import ChunkSearchPort
+from game_service.domain.chunk_search import RetrievedChunk
 from game_service.domain.daily import daily_term_ids
 from game_service.domain.graders import AnswerEvaluator
 from game_service.domain.graders import build_deterministic_evaluator
@@ -48,10 +51,12 @@ class SubmitAnswer:
         uow: UnitOfWork,
         evaluator: AnswerEvaluator | None = None,
         llm_grader: LLMRubricGrader | None = None,
+        chunk_search: ChunkSearchPort | None = None,
     ) -> None:
         self.uow = uow
         self.evaluator = evaluator or build_deterministic_evaluator()
         self.llm_grader = llm_grader
+        self.chunk_search = chunk_search
 
     async def execute(
         self,
@@ -187,7 +192,7 @@ class SubmitAnswer:
         """
         assert self.llm_grader is not None
         try:
-            return await self.llm_grader.grade(answer, term)
+            return await self.llm_grader.grade(answer, term, self.chunk_search)
         except Exception:
             logger.warning(
                 "LLM grader failed, using deterministic outcome",
@@ -210,9 +215,11 @@ class SubmitAnswerStreaming:
         uow: UnitOfWork,
         evaluator: AnswerEvaluator | None = None,
         llm_grader: LLMRubricGrader | None = None,
+        chunk_search: ChunkSearchPort | None = None,
     ) -> None:
-        self._submit_answer = SubmitAnswer(uow, evaluator, llm_grader)
+        self._submit_answer = SubmitAnswer(uow, evaluator, llm_grader, chunk_search)
         self.llm_grader = llm_grader
+        self.chunk_search = chunk_search
 
     @property
     def uow(self) -> UnitOfWork:
@@ -279,9 +286,11 @@ class SubmitAnswerStreaming:
         """
         assert self.llm_grader is not None
         try:
-            async for chunk in self.llm_grader.stream_rationale(answer, term):
+            async for chunk in self.llm_grader.stream_rationale(
+                answer, term, self.chunk_search
+            ):
                 yield StreamEvent.rationale_delta(chunk)
-            outcome = await self.llm_grader.grade(answer, term)
+            outcome = await self.llm_grader.grade(answer, term, self.chunk_search)
             yield StreamEvent.graded(outcome)
         except Exception:
             logger.warning(
@@ -433,3 +442,26 @@ class ListTermCategories:
         """Return every category slug, sorted."""
         async with self.uow:
             return await self.uow.terms.categories()
+
+
+class SearchDocumentChunks:
+    """Semantic search over content-service's RAG document-chunk corpus
+    (ADR-0012 Slice 2) — retrieval only, no LLM synthesis (deferred: a
+    second independent LLM integration point wasn't worth adding for this
+    increment; see the corpus-population/grading-integration ADR note).
+
+    Not a UnitOfWork consumer — ChunkSearchPort is a pure network call, no
+    game-service-owned persistence involved.
+    """
+
+    def __init__(self, chunk_search: ChunkSearchPort) -> None:
+        self.chunk_search = chunk_search
+
+    async def execute(
+        self, query: str, top_k: int = constants.CHUNK_SEARCH_DEFAULT_TOP_K
+    ) -> tuple[RetrievedChunk, ...]:
+        """The top_k chunks most semantically similar to `query`, closest
+        first. Empty on a content-service outage — ChunkSearchPort never
+        raises (see its docstring); there is nothing to fall back to here,
+        this endpoint's whole job is the retrieval itself."""
+        return await self.chunk_search.search(query, top_k)

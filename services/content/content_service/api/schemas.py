@@ -163,6 +163,27 @@ class DocumentChunkListResponse(BaseModel):
     chunks: tuple[DocumentChunkResponse, ...]
 
 
+class EmbedDocumentChunksResponse(BaseModel):
+    """Result of one embedding pass over the backlog (ADR-0012 Slice 2).
+
+    Reports what got embedded, not the vectors themselves — a client
+    triggering this endpoint needs to know progress, not read back 384
+    floats per chunk."""
+
+    embedded_count: int
+    embedded_chunk_ids: tuple[int, ...]
+
+    @staticmethod
+    def from_chunks(chunks: tuple[DocumentChunk, ...]) -> EmbedDocumentChunksResponse:
+        ids = []
+        for chunk in chunks:
+            assert chunk.id is not None  # always set once read back
+            ids.append(chunk.id)
+        return EmbedDocumentChunksResponse(
+            embedded_count=len(chunks), embedded_chunk_ids=tuple(ids)
+        )
+
+
 class SubmitReviewCandidateRequest(BaseModel):
     """A pipeline-enriched, validated candidate submitted for review.
 

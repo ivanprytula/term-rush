@@ -101,6 +101,26 @@ class DocumentChunkRepository(ABC):
     async def delete_by_source_file(self, source_file: str) -> None:
         """Remove every chunk from one source document. No-op if none exist."""
 
+    @abstractmethod
+    async def unembedded(self, limit: int) -> tuple[DocumentChunk, ...]:
+        """Up to `limit` chunks with no embedding yet, oldest-inserted
+        first. Bounded so embedding runs as a batched background pass, not
+        an unbounded scan over the whole corpus."""
+
+    @abstractmethod
+    async def set_embedding(self, chunk_id: int, embedding: tuple[float, ...]) -> None:
+        """Write the embedding for one chunk. No-op if the id doesn't
+        exist — the caller already has the id from `unembedded`, so a miss
+        here means it was deleted concurrently, not a bug to surface."""
+
+    @abstractmethod
+    async def search_by_similarity(
+        self, query_embedding: tuple[float, ...], top_k: int
+    ) -> tuple[DocumentChunk, ...]:
+        """The top_k chunks nearest query_embedding by cosine distance,
+        closest first. Chunks with no embedding yet are never returned —
+        they haven't been indexed, not "infinitely far"."""
+
 
 class EventPublisher(ABC):
     """Publish domain events for external consumption."""

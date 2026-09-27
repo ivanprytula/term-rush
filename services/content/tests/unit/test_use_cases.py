@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from content_service.application.use_cases import ApproveReviewCandidate
+from content_service.application.use_cases import EmbedDocumentChunks
 from content_service.application.use_cases import GetRandomTerm
 from content_service.application.use_cases import GetTermById
 from content_service.application.use_cases import IngestDocumentChunks
@@ -13,7 +14,9 @@ from content_service.application.use_cases import ListDocumentChunksBySource
 from content_service.application.use_cases import ListReviewCandidates
 from content_service.application.use_cases import PublishTerm
 from content_service.application.use_cases import RejectReviewCandidate
+from content_service.application.use_cases import SearchChunksBySimilarity
 from content_service.application.use_cases import SubmitReviewCandidate
+from content_service.domain import constants
 from content_service.domain.document_chunk import DocumentChunk
 from content_service.domain.review import ReviewCandidateNotPending
 from content_service.domain.review import ReviewStatus
@@ -321,3 +324,175 @@ async def test_reject_review_candidate_never_publishes(term: Term) -> None:
 async def test_reject_review_candidate_raises_when_missing() -> None:
     with pytest.raises(ValueError, match="not found"):
         await RejectReviewCandidate(InMemoryUnitOfWork()).execute(999)
+
+
+class _FakeEmbedder:
+    """Deterministic stub: embeds each call, records what it was asked to
+    embed so tests can assert on call order/content without a real model."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def embed(self, text: str) -> list[float]:
+        self.calls.append(text)
+        return [0.0] * constants.DOCUMENT_CHUNK_EMBEDDING_DIM
+
+
+@pytest.mark.asyncio
+async def test_embed_document_chunks_embeds_the_backlog() -> None:
+    uow = InMemoryUnitOfWork()
+    await IngestDocumentChunks(uow).execute((_chunk("a.pdf", 0), _chunk("a.pdf", 1)))
+    embedder = _FakeEmbedder()
+
+    embedded = await EmbedDocumentChunks(uow, embedder).execute()
+
+    assert len(embedded) == 2
+    assert all(c.embedding is not None for c in embedded)
+    assert sorted(embedder.calls) == ["chunk 0", "chunk 1"]
+
+
+@pytest.mark.asyncio
+async def test_embed_document_chunks_persists_the_embedding() -> None:
+    uow = InMemoryUnitOfWork()
+    await IngestDocumentChunks(uow).execute((_chunk("a.pdf", 0),))
+
+    await EmbedDocumentChunks(uow, _FakeEmbedder()).execute()
+
+    fetched = await ListDocumentChunksBySource(uow).execute("a.pdf")
+    assert fetched[0].embedding is not None
+    assert len(fetched[0].embedding) == constants.DOCUMENT_CHUNK_EMBEDDING_DIM
+
+
+@pytest.mark.asyncio
+async def test_embed_document_chunks_skips_already_embedded() -> None:
+    uow = InMemoryUnitOfWork()
+    await IngestDocumentChunks(uow).execute((_chunk("a.pdf", 0),))
+    embedder = _FakeEmbedder()
+    await EmbedDocumentChunks(uow, embedder).execute()
+
+    second_pass = await EmbedDocumentChunks(uow, embedder).execute()
+
+    assert second_pass == ()
+    assert len(embedder.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_embed_document_chunks_respects_batch_size() -> None:
+    uow = InMemoryUnitOfWork()
+    await IngestDocumentChunks(uow).execute(
+        (_chunk("a.pdf", 0), _chunk("a.pdf", 1), _chunk("a.pdf", 2))
+    )
+
+    embedded = await EmbedDocumentChunks(uow, _FakeEmbedder()).execute(batch_size=2)
+
+    assert len(embedded) == 2
+
+
+@pytest.mark.asyncio
+async def test_embed_document_chunks_returns_empty_when_nothing_pending() -> None:
+    uow = InMemoryUnitOfWork()
+
+    embedded = await EmbedDocumentChunks(uow, _FakeEmbedder()).execute()
+
+    assert embedded == ()
+
+
+class _LookupEmbedder:
+    """Maps known text to fixed, distinguishable vectors so ranking is
+    checkable — a real model's actual output would make expected order
+    unpredictable without asserting on the model itself."""
+
+    def __init__(self, vectors: dict[str, tuple[float, ...]]) -> None:
+        self._vectors = vectors
+
+    async def embed(self, text: str) -> list[float]:
+        return list(self._vectors[text])
+
+
+_DIM = constants.DOCUMENT_CHUNK_EMBEDDING_DIM
+
+
+def _unit_vector(index: int) -> tuple[float, ...]:
+    """A one-hot vector — orthogonal to every other _unit_vector, so cosine
+    distance between two different indices is always 1.0 (maximally
+    dissimilar) and 0.0 to itself (identical)."""
+    return tuple(1.0 if i == index else 0.0 for i in range(_DIM))
+
+
+@pytest.mark.asyncio
+async def test_search_chunks_by_similarity_ranks_closest_first() -> None:
+    uow = InMemoryUnitOfWork()
+    await IngestDocumentChunks(uow).execute(
+        (_chunk("a.pdf", 0), _chunk("a.pdf", 1), _chunk("a.pdf", 2))
+    )
+    fixed = _LookupEmbedder(
+        {
+            "chunk 0": _unit_vector(0),
+            "chunk 1": _unit_vector(1),
+            "chunk 2": _unit_vector(2),
+        }
+    )
+    await EmbedDocumentChunks(uow, fixed).execute()
+    query_embedder = _LookupEmbedder({"query": _unit_vector(1)})
+
+    results = await SearchChunksBySimilarity(uow, query_embedder).execute(
+        "query", top_k=3
+    )
+
+    assert [c.text for c in results][0] == "chunk 1"
+
+
+@pytest.mark.asyncio
+async def test_search_chunks_by_similarity_respects_top_k() -> None:
+    uow = InMemoryUnitOfWork()
+    await IngestDocumentChunks(uow).execute(
+        (_chunk("a.pdf", 0), _chunk("a.pdf", 1), _chunk("a.pdf", 2))
+    )
+    fixed = _LookupEmbedder(
+        {
+            "chunk 0": _unit_vector(0),
+            "chunk 1": _unit_vector(1),
+            "chunk 2": _unit_vector(2),
+        }
+    )
+    await EmbedDocumentChunks(uow, fixed).execute()
+    query_embedder = _LookupEmbedder({"query": _unit_vector(0)})
+
+    results = await SearchChunksBySimilarity(uow, query_embedder).execute(
+        "query", top_k=1
+    )
+
+    assert len(results) == 1
+
+
+@pytest.mark.asyncio
+async def test_search_chunks_by_similarity_excludes_unembedded_chunks() -> None:
+    uow = InMemoryUnitOfWork()
+    await IngestDocumentChunks(uow).execute((_chunk("a.pdf", 0),))
+    query_embedder = _LookupEmbedder({"query": _unit_vector(0)})
+
+    results = await SearchChunksBySimilarity(uow, query_embedder).execute("query")
+
+    assert results == ()
+
+
+@pytest.mark.asyncio
+async def test_search_chunks_by_similarity_defaults_top_k() -> None:
+    uow = InMemoryUnitOfWork()
+    await IngestDocumentChunks(uow).execute(
+        tuple(_chunk("a.pdf", i) for i in range(constants.SEARCH_DEFAULT_TOP_K + 2))
+    )
+    fixed = _LookupEmbedder(
+        {
+            f"chunk {i}": _unit_vector(i)
+            for i in range(constants.SEARCH_DEFAULT_TOP_K + 2)
+        }
+    )
+    await EmbedDocumentChunks(uow, fixed).execute(
+        batch_size=constants.SEARCH_DEFAULT_TOP_K + 2
+    )
+    query_embedder = _LookupEmbedder({"query": _unit_vector(0)})
+
+    results = await SearchChunksBySimilarity(uow, query_embedder).execute("query")
+
+    assert len(results) == constants.SEARCH_DEFAULT_TOP_K

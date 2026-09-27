@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from game_service.domain import constants
+from game_service.domain.chunk_search import RetrievedChunk
 from game_service.domain.outcome import GradeOutcome
 from game_service.domain.outcome import StreamEvent
 from game_service.domain.outcome import StreamEventKind
@@ -55,6 +56,15 @@ CategoryQuery = Annotated[
 # difficulty scopes the pick to terms at or above it. Ignored for a Boss
 # round, which always derives its own filter from TermFilter.boss_eligible().
 DifficultyQuery = Annotated[Difficulty | None, Query()]
+
+# ADR-0012 Slice 2: free-text search over content-service's RAG corpus.
+ChunkSearchQuery = Annotated[
+    str, Query(min_length=1, max_length=constants.CHUNK_SEARCH_QUERY_MAX_LEN)
+]
+ChunkSearchTopKQuery = Annotated[
+    int,
+    Query(ge=constants.CHUNK_SEARCH_MIN_TOP_K, le=constants.CHUNK_SEARCH_MAX_TOP_K),
+]
 
 
 class CreateRoundRequest(BaseModel):
@@ -357,6 +367,23 @@ class TermStatsResponse(BaseModel):
             incorrect_count=0,
             observed_difficulty=None,
         )
+
+
+class RetrievedChunkResponse(BaseModel):
+    """One chunk of grounding text from the RAG corpus, with provenance."""
+
+    text: str
+    source_file: str
+
+    @staticmethod
+    def from_chunk(chunk: RetrievedChunk) -> RetrievedChunkResponse:
+        return RetrievedChunkResponse(text=chunk.text, source_file=chunk.source_file)
+
+
+class ChunkSearchResponse(BaseModel):
+    """Semantic search results over the document-chunk corpus."""
+
+    chunks: tuple[RetrievedChunkResponse, ...]
 
 
 class ErrorResponse(BaseModel):

@@ -1,8 +1,8 @@
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from collections.abc import Iterable as _Iterable
-from typing import ClassVar as _ClassVar, Optional as _Optional
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
+from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -73,3 +73,25 @@ class TermReply(_message.Message):
     prerequisites: _containers.RepeatedScalarFieldContainer[str]
     common_mistakes: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, found: _Optional[bool] = ..., id: _Optional[str] = ..., term: _Optional[str] = ..., expansion: _Optional[str] = ..., definitions: _Optional[_Iterable[str]] = ..., aliases: _Optional[_Iterable[str]] = ..., categories: _Optional[_Iterable[str]] = ..., difficulty: _Optional[int] = ..., examples: _Optional[_Iterable[str]] = ..., related: _Optional[_Iterable[str]] = ..., prerequisites: _Optional[_Iterable[str]] = ..., common_mistakes: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class SearchChunksRequest(_message.Message):
+    __slots__ = ("query", "top_k")
+    QUERY_FIELD_NUMBER: _ClassVar[int]
+    TOP_K_FIELD_NUMBER: _ClassVar[int]
+    query: str
+    top_k: int
+    def __init__(self, query: _Optional[str] = ..., top_k: _Optional[int] = ...) -> None: ...
+
+class SearchChunksReply(_message.Message):
+    __slots__ = ("chunks",)
+    CHUNKS_FIELD_NUMBER: _ClassVar[int]
+    chunks: _containers.RepeatedCompositeFieldContainer[DocumentChunkResult]
+    def __init__(self, chunks: _Optional[_Iterable[_Union[DocumentChunkResult, _Mapping]]] = ...) -> None: ...
+
+class DocumentChunkResult(_message.Message):
+    __slots__ = ("text", "source_file")
+    TEXT_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_FILE_FIELD_NUMBER: _ClassVar[int]
+    text: str
+    source_file: str
+    def __init__(self, text: _Optional[str] = ..., source_file: _Optional[str] = ...) -> None: ...

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from content_service.api import dependencies
 from content_service.api.config import settings
 from content_service.api.dependencies import _init_session_factory
+from content_service.api.dependencies import get_embedder
 from content_service.api.dependencies import get_unit_of_work
 from content_service.api.grpc.server import serve as serve_grpc
 from content_service.api.routers import document_chunks
@@ -38,7 +39,9 @@ async def lifespan(_app: FastAPI):
     except Exception as e:
         logger.critical(f"Failed to initialize database: {e}")
         raise
-    grpc_server = await serve_grpc(get_unit_of_work, port=settings.GRPC_PORT)
+    grpc_server = await serve_grpc(
+        get_unit_of_work, get_embedder, port=settings.GRPC_PORT
+    )
     try:
         yield
     finally:

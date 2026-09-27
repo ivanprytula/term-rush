@@ -179,7 +179,10 @@ services:
       - FOWNER
 
   postgres-content:
-    image: postgres:17-alpine
+    # pgvector/pgvector, not plain postgres: the document_chunks.embedding
+    # column (ADR-0012 Slice 2) needs the `vector` extension, which stock
+    # postgres images don't ship.
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}

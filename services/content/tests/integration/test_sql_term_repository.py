@@ -8,6 +8,7 @@ from collections.abc import Generator
 from typing import Any
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -24,7 +25,10 @@ pytestmark = pytest.mark.docker
 
 @pytest.fixture(scope="module")
 def postgres_url() -> Generator[str]:
-    with PostgresContainer("postgres:17-alpine") as container:
+    # Base.metadata covers the whole schema, document_chunks included, so
+    # every fixture here needs the `vector` extension even when the test
+    # itself doesn't touch that table.
+    with PostgresContainer("pgvector/pgvector:pg17") as container:
         yield container.get_connection_url().replace(
             "postgresql+psycopg2", "postgresql+asyncpg"
         )
@@ -34,6 +38,7 @@ def postgres_url() -> Generator[str]:
 async def session(postgres_url: str) -> AsyncGenerator[AsyncSession]:
     engine = create_async_engine(postgres_url)
     async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
     factory: Any = sessionmaker(  # type: ignore
         engine, class_=AsyncSession, expire_on_commit=False

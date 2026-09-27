@@ -6,10 +6,28 @@ import pytest
 from term_proto import term_pb2
 
 from content_service.api.grpc.server import TermServiceServicer
+from content_service.domain import constants
+from content_service.domain.document_chunk import DocumentChunk
 from content_service.domain.term import Category
 from content_service.domain.term import Difficulty
 from content_service.domain.term import Term
 from content_service.infrastructure.memory import InMemoryUnitOfWork
+
+
+class _LookupEmbedder:
+    """Maps known query text to a fixed vector so search ranking is
+    checkable without a real model."""
+
+    def __init__(self, vectors: dict[str, tuple[float, ...]]) -> None:
+        self._vectors = vectors
+
+    async def embed(self, text: str) -> list[float]:
+        return list(self._vectors[text])
+
+
+def _unit_vector(index: int) -> tuple[float, ...]:
+    dim = constants.DOCUMENT_CHUNK_EMBEDDING_DIM
+    return tuple(1.0 if i == index else 0.0 for i in range(dim))
 
 
 @pytest.fixture
@@ -23,11 +41,15 @@ def term() -> Term:
     )
 
 
-def _servicer(uow: InMemoryUnitOfWork) -> TermServiceServicer:
+def _servicer(
+    uow: InMemoryUnitOfWork, embedder: _LookupEmbedder | None = None
+) -> TermServiceServicer:
     async def get_unit_of_work():
         yield uow
 
-    return TermServiceServicer(get_unit_of_work)
+    return TermServiceServicer(
+        get_unit_of_work, lambda: embedder or _LookupEmbedder({})
+    )
 
 
 @pytest.mark.asyncio
@@ -142,3 +164,65 @@ async def test_list_term_ids_returns_every_id_sorted(term: Term) -> None:
     )
 
     assert tuple(reply.term_ids) == ("uow", "zebra")
+
+
+async def _seed_embedded_chunk(
+    uow: InMemoryUnitOfWork, text: str, embedding: tuple[float, ...]
+) -> None:
+    chunk = DocumentChunk(
+        text=text,
+        source_file="doc.txt",
+        chunk_index=0,
+        char_start=0,
+        char_end=len(text),
+    )
+    (added,) = await uow.document_chunks.add_batch((chunk,))
+    assert added.id is not None
+    await uow.document_chunks.set_embedding(added.id, embedding)
+
+
+@pytest.mark.asyncio
+async def test_search_chunks_ranks_closest_first() -> None:
+    uow = InMemoryUnitOfWork()
+    await _seed_embedded_chunk(uow, "about UoW", _unit_vector(0))
+    await _seed_embedded_chunk(uow, "about something else", _unit_vector(1))
+    embedder = _LookupEmbedder({"UoW pattern": _unit_vector(0)})
+    servicer = _servicer(uow, embedder)
+
+    reply = await servicer.SearchChunks(
+        term_pb2.SearchChunksRequest(query="UoW pattern", top_k=2),
+        context=None,  # type: ignore
+    )
+
+    assert reply.chunks[0].text == "about UoW"
+
+
+@pytest.mark.asyncio
+async def test_search_chunks_defaults_top_k_when_unset() -> None:
+    uow = InMemoryUnitOfWork()
+    for i in range(constants.SEARCH_DEFAULT_TOP_K + 2):
+        await _seed_embedded_chunk(uow, f"chunk {i}", _unit_vector(i))
+    embedder = _LookupEmbedder({"query": _unit_vector(0)})
+    servicer = _servicer(uow, embedder)
+
+    # top_k left unset — proto3 int32 defaults to 0, which must not mean
+    # "return nothing."
+    reply = await servicer.SearchChunks(
+        term_pb2.SearchChunksRequest(query="query"),
+        context=None,  # type: ignore
+    )
+
+    assert len(reply.chunks) == constants.SEARCH_DEFAULT_TOP_K
+
+
+@pytest.mark.asyncio
+async def test_search_chunks_empty_corpus_returns_no_chunks() -> None:
+    embedder = _LookupEmbedder({"anything": _unit_vector(0)})
+    servicer = _servicer(InMemoryUnitOfWork(), embedder)
+
+    reply = await servicer.SearchChunks(
+        term_pb2.SearchChunksRequest(query="anything", top_k=5),
+        context=None,  # type: ignore
+    )
+
+    assert tuple(reply.chunks) == ()

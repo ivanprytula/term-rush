@@ -27,3 +27,8 @@ class DocumentChunk(BaseModel):
     chunk_index: int = Field(ge=0)
     char_start: int = Field(ge=0)
     char_end: int = Field(ge=0)
+    embedding: tuple[float, ...] | None = Field(
+        default=None,
+        min_length=constants.DOCUMENT_CHUNK_EMBEDDING_DIM,
+        max_length=constants.DOCUMENT_CHUNK_EMBEDDING_DIM,
+    )

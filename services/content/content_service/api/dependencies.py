@@ -10,9 +10,11 @@ from aiokafka import AIOKafkaProducer
 from content_service.api.config import settings
 from content_service.application.ports import EventPublisher
 from content_service.application.ports import UnitOfWork
+from content_service.domain.embedding import EmbeddingPort
 from content_service.infrastructure.database import create_db_engine
 from content_service.infrastructure.kafka_event_publisher import KafkaEventPublisher
 from content_service.infrastructure.memory import InMemoryUnitOfWork
+from content_service.infrastructure.onnx_embedder import OnnxEmbedder
 from content_service.infrastructure.sql_uow import SQLUnitOfWork
 
 # Session factory, engine, and Kafka producer (created at app startup via lifespan)
@@ -20,6 +22,11 @@ _session_factory: Any = None
 _engine: Any = None
 _kafka_producer: AIOKafkaProducer | None = None
 _event_publisher: EventPublisher | None = None
+
+# Constructed lazily (not at import time): loading the model is a real,
+# one-time startup cost that shouldn't run for every test importing this
+# module, only for processes that actually embed something.
+_embedder: EmbeddingPort | None = None
 
 
 async def _init_session_factory() -> None:
@@ -51,3 +58,12 @@ async def get_unit_of_work() -> AsyncGenerator[UnitOfWork]:
     else:
         async with _session_factory() as session:
             yield SQLUnitOfWork(session, _event_publisher)
+
+
+def get_embedder() -> EmbeddingPort:
+    """Provide the embedding adapter, constructing it (and loading the
+    model) on first use rather than at import time."""
+    global _embedder
+    if _embedder is None:
+        _embedder = OnnxEmbedder()
+    return _embedder

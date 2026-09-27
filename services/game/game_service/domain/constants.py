@@ -67,3 +67,20 @@ DAILY_20_SEED_EPOCH = "term-rush-daily"  # namespace prefix for the date seed,
 LEADERBOARD_MIN_LIMIT = 1
 LEADERBOARD_MAX_LIMIT = 100
 LEADERBOARD_DEFAULT_LIMIT = 10
+
+# Document-chunk search bounds (ADR-0012 Slice 2) — mirrors
+# content-service's own SEARCH_DEFAULT_TOP_K/cap; kept as a separate
+# constant here rather than shared, since the two services don't share a
+# constants module and this boundary is validated independently at each.
+CHUNK_SEARCH_MIN_TOP_K = 1
+CHUNK_SEARCH_MAX_TOP_K = 20
+CHUNK_SEARCH_DEFAULT_TOP_K = 5
+CHUNK_SEARCH_QUERY_MAX_LEN = 512  # sanity ceiling at the API boundary,
+# not a retrieval-quality tuning value
+
+# How many chunks LLMRubricGrader retrieves to ground the judge's prompt
+# (ADR-0012 Slice 2) — deliberately smaller than CHUNK_SEARCH_DEFAULT_TOP_K:
+# this context is prepended to every grading call, so it has to stay small
+# relative to the judge's own token/latency budget, not sized for a
+# human reading a search result page.
+LLM_GRADING_CONTEXT_TOP_K = 3

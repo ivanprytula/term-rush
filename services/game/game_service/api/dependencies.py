@@ -14,11 +14,13 @@ from game_service.api.config import settings
 from game_service.application.ports import EventPublisher
 from game_service.application.ports import TermStatsRepository
 from game_service.application.ports import UnitOfWork
+from game_service.domain.chunk_search import ChunkSearchPort
 from game_service.domain.graders import AnswerEvaluator
 from game_service.domain.graders import build_deterministic_evaluator
 from game_service.domain.llm_grader import LLMRubricGrader
 from game_service.infrastructure.answer_graded_stats import TOPIC as ANSWER_TOPIC
 from game_service.infrastructure.database import create_db_engine
+from game_service.infrastructure.grpc_chunk_search import GrpcChunkSearch
 from game_service.infrastructure.grpc_term_repository import GrpcTermRepository
 from game_service.infrastructure.kafka_event_publisher import KafkaEventPublisher
 from game_service.infrastructure.llm_judge import AnthropicJudgePort
@@ -40,6 +42,7 @@ _session_factory: Any = None
 _engine: Any = None
 _grpc_channel: grpc.aio.Channel | None = None
 _term_repository: GrpcTermRepository | None = None
+_chunk_search: ChunkSearchPort | None = None
 _kafka_producer: AIOKafkaProducer | None = None
 _event_publisher: EventPublisher | None = None
 _kafka_consumer: AIOKafkaConsumer | None = None
@@ -93,6 +96,7 @@ async def _init_session_factory() -> None:
     that one `async with` block instead of tracked as separate globals.
     """
     global _session_factory, _engine, _grpc_channel, _term_repository
+    global _chunk_search
     global _kafka_producer, _event_publisher, _kafka_consumer
     global _consumer_health
     global _stats_consumer, _stats_consumer_health
@@ -101,6 +105,7 @@ async def _init_session_factory() -> None:
     _engine, _session_factory = await create_db_engine(str(settings.DATABASE_URL))
     _grpc_channel = grpc.aio.insecure_channel(settings.CONTENT_SERVICE_GRPC_URL)
     _term_repository = GrpcTermRepository(_grpc_channel)
+    _chunk_search = GrpcChunkSearch(_grpc_channel)
     if settings.KAFKA_BROKER_URL is not None:
         _kafka_producer = AIOKafkaProducer(bootstrap_servers=settings.KAFKA_BROKER_URL)
         await _kafka_producer.start()
@@ -159,6 +164,15 @@ async def get_term_stats_repository() -> AsyncGenerator[TermStatsRepository]:
 def get_llm_grader() -> LLMRubricGrader | None:
     """Provide the LLM rubric grader, or None if ANTHROPIC_API_KEY is unset."""
     return _llm_grader
+
+
+def get_chunk_search() -> ChunkSearchPort | None:
+    """Provide RAG retrieval over content-service's document-chunk corpus,
+    or None when there's no gRPC channel to reach it (no DATABASE_URL —
+    the in-memory test path). Same optionality as get_llm_grader: callers
+    treat a missing port as "grade without retrieval context," not an
+    error."""
+    return _chunk_search
 
 
 def get_answer_evaluator() -> AnswerEvaluator:

@@ -6,6 +6,11 @@ service TermService {
   rpc GetRandom(GetRandomRequest) returns (TermReply);
   rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesReply);
   rpc ListTermIds(ListTermIdsRequest) returns (ListTermIdsReply);
+  // ADR-0012 Slice 2: semantic search over the document-chunk RAG corpus,
+  // for grounding the LLM judge's grading context. Same internal,
+  // latency-sensitive hop as term lookup (ADR-0009) - one protocol between
+  // game-service and content-service, not a second HTTP dependency.
+  rpc SearchChunks(SearchChunksRequest) returns (SearchChunksReply);
 }
 
 message GetByIdRequest {
@@ -49,4 +54,18 @@ message TermReply {
   repeated string related = 10;
   repeated string prerequisites = 11;
   repeated string common_mistakes = 12;
+}
+
+message SearchChunksRequest {
+  string query = 1;
+  int32 top_k = 2;
+}
+
+message SearchChunksReply {
+  repeated DocumentChunkResult chunks = 1;
+}
+
+message DocumentChunkResult {
+  string text = 1;
+  string source_file = 2;
 }

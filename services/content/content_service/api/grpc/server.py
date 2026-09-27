@@ -20,11 +20,15 @@ from content_service.application.use_cases import GetRandomTerm
 from content_service.application.use_cases import GetTermById
 from content_service.application.use_cases import ListAllTermIds
 from content_service.application.use_cases import ListCategories
+from content_service.application.use_cases import SearchChunksBySimilarity
+from content_service.domain import constants
+from content_service.domain.embedding import EmbeddingPort
 from content_service.domain.term import Term
 
 logger = logging.getLogger(__name__)
 
 UnitOfWorkFactory = Callable[[], AsyncGenerator[UnitOfWork]]
+EmbedderFactory = Callable[[], EmbeddingPort]
 
 # get_unit_of_work is a FastAPI-Depends-shaped generator (yield once, cleanup
 # on the caller driving it past the yield). A bare anext() takes the yielded
@@ -54,8 +58,11 @@ def _to_reply(term: Term) -> term_pb2.TermReply:
 class TermServiceServicer(term_pb2_grpc.TermServiceServicer):
     """Implements the TermService contract from term.proto."""
 
-    def __init__(self, get_unit_of_work: UnitOfWorkFactory) -> None:
+    def __init__(
+        self, get_unit_of_work: UnitOfWorkFactory, get_embedder: EmbedderFactory
+    ) -> None:
         self._get_unit_of_work = get_unit_of_work
+        self._get_embedder = get_embedder
 
     async def GetById(
         self, request: term_pb2.GetByIdRequest, context: grpc.aio.ServicerContext
@@ -114,14 +121,34 @@ class TermServiceServicer(term_pb2_grpc.TermServiceServicer):
             term_ids = await use_case.execute()
             return term_pb2.ListTermIdsReply(term_ids=term_ids)
 
+    async def SearchChunks(
+        self,
+        request: term_pb2.SearchChunksRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> term_pb2.SearchChunksReply:
+        # proto3 int32 defaults to 0 when unset — 0 means "use the use
+        # case's own default," not "return nothing."
+        top_k = request.top_k if request.top_k > 0 else constants.SEARCH_DEFAULT_TOP_K
+        async with asynccontextmanager(self._get_unit_of_work)() as uow:
+            use_case = SearchChunksBySimilarity(uow, self._get_embedder())
+            chunks = await use_case.execute(request.query, top_k)
+            return term_pb2.SearchChunksReply(
+                chunks=[
+                    term_pb2.DocumentChunkResult(text=c.text, source_file=c.source_file)
+                    for c in chunks
+                ]
+            )
+
 
 async def serve(
-    get_unit_of_work: UnitOfWorkFactory, port: int = 50051
+    get_unit_of_work: UnitOfWorkFactory,
+    get_embedder: EmbedderFactory,
+    port: int = 50051,
 ) -> grpc.aio.Server:
     """Start the gRPC server and return it (caller awaits server.wait_for_termination())."""
     server = grpc.aio.server()
     term_pb2_grpc.add_TermServiceServicer_to_server(
-        TermServiceServicer(get_unit_of_work), server
+        TermServiceServicer(get_unit_of_work, get_embedder), server
     )
     server.add_insecure_port(f"[::]:{port}")
     await server.start()
