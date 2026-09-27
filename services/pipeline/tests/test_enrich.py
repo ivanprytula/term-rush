@@ -15,7 +15,7 @@ from pipeline_service.candidate import Confidence
 from pipeline_service.candidate import SourceType
 from pipeline_service.candidate import TermCandidate
 from pipeline_service.enrich import AnthropicEnricher
-from pipeline_service.enrich import _term_id
+from pipeline_service.enrich import term_id
 
 
 @pytest.fixture
@@ -53,11 +53,11 @@ class _FakeAnthropicClient:
 
 
 def test_term_id_normalizes_a_valid_name() -> None:
-    assert _term_id("better-profanity-fast") == "better-profanity-fast"
+    assert term_id("better-profanity-fast") == "better-profanity-fast"
 
 
 def test_term_id_strips_invalid_characters() -> None:
-    assert _term_id("FastAPI[standard]") == "fastapi-standard"
+    assert term_id("FastAPI[standard]") == "fastapi-standard"
 
 
 @pytest.mark.asyncio

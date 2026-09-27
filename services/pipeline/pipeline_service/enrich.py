@@ -80,7 +80,7 @@ def _user_message(candidate: TermCandidate, usage_snippets: tuple[str, ...]) -> 
     return f"{header}\n\nRepository usage snippets:\n{joined}"
 
 
-def _term_id(name: str) -> str:
+def term_id(name: str) -> str:
     """A candidate name like 'better-profanity-fast' is already a valid
     term id; anything with characters outside [a-z0-9-] gets normalized.
     """
@@ -114,7 +114,7 @@ class AnthropicEnricher:
         assert isinstance(raw, dict)
 
         return EnrichedTerm(
-            id=_term_id(candidate.name),
+            id=term_id(candidate.name),
             term=candidate.name,
             expansion=str(raw["expansion"]),
             definitions=tuple(raw["definitions"]),  # type: ignore  # untyped provider response

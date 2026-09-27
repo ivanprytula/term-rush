@@ -16,6 +16,9 @@ coverage/
 # Dagster local runtime state (run history, event log, materialized assets)
 .dagster_home/
 
+# LangGraph checkpoint DB (ADR-0019 agentic_review_candidates, local dev)
+*.sqlite
+
 # Node
 node_modules/
 dist/

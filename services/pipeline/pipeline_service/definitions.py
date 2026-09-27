@@ -8,6 +8,10 @@ Two pipelines, sharing one intake directory:
   loaded_candidates (load). document_ocr_candidates is document
   ingestion's secondary consumer (ADR-0018): LOW confidence, so it only
   wins a dedup tie when no higher-confidence source names the same term.
+  agentic_review_candidates runs alongside loaded_candidates off the same
+  validated_candidates input (ADR-0019: additive, not a replacement) - a
+  LangGraph agent slice, Slice 1 scaffolding only (retrieve, no draft/
+  critique/write yet).
 - Document ingestion (ADR-0018): intake_documents (extract) ->
   document_chunks (chunk) -> ingested_chunks (load). No enrich/validate
   stage - chunking is deterministic, nothing here needs an LLM. This is
@@ -25,6 +29,7 @@ from __future__ import annotations
 
 import dagster as dg
 
+from pipeline_service.assets.agentic_review import agentic_review_candidates
 from pipeline_service.assets.candidates import adr_heading_candidates
 from pipeline_service.assets.candidates import class_name_candidates
 from pipeline_service.assets.candidates import dependency_manifest_candidates
@@ -45,6 +50,7 @@ defs = dg.Definitions(
         enriched_candidates,
         validated_candidates,
         loaded_candidates,
+        agentic_review_candidates,
         intake_documents,
         document_chunks,
         ingested_chunks,
