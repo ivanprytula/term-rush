@@ -11,6 +11,7 @@ from fastapi import status
 from sse_starlette.sse import EventSourceResponse
 
 from game_service.api.dependencies import get_answer_evaluator
+from game_service.api.dependencies import get_chunk_search
 from game_service.api.dependencies import get_llm_grader
 from game_service.api.dependencies import get_unit_of_work
 from game_service.api.schemas import ErrorResponse
@@ -21,6 +22,7 @@ from game_service.api.schemas import SubmitAnswerStreamEvent
 from game_service.application.ports import UnitOfWork
 from game_service.application.use_cases import SubmitAnswer
 from game_service.application.use_cases import SubmitAnswerStreaming
+from game_service.domain.chunk_search import ChunkSearchPort
 from game_service.domain.graders import AnswerEvaluator
 from game_service.domain.llm_grader import LLMRubricGrader
 from game_service.domain.round import RoundExpired
@@ -47,6 +49,7 @@ async def submit_answer(
     uow: UnitOfWork = Depends(get_unit_of_work),
     evaluator: AnswerEvaluator = Depends(get_answer_evaluator),
     llm_grader: LLMRubricGrader | None = Depends(get_llm_grader),
+    chunk_search: ChunkSearchPort | None = Depends(get_chunk_search),
 ) -> SubmitAnswerResponse:
     """Submit an answer for grading.
 
@@ -55,9 +58,12 @@ async def submit_answer(
     answers are rejected before any correctness check runs. Grading is
     deterministic by default; PARTIAL verdicts additionally escalate to the
     LLM rubric judge when use_llm_grading is set and the server has one
-    configured.
+    configured. The judge's prompt is additionally grounded in RAG-retrieved
+    document chunks (ADR-0012 Slice 2) when chunk_search is configured.
     """
-    use_case = SubmitAnswer(uow, evaluator=evaluator, llm_grader=llm_grader)
+    use_case = SubmitAnswer(
+        uow, evaluator=evaluator, llm_grader=llm_grader, chunk_search=chunk_search
+    )
     try:
         outcome = await use_case.execute(
             round_id, payload.term_id, payload.answer, payload.use_llm_grading
@@ -82,6 +88,7 @@ async def submit_answer_stream(
     uow: UnitOfWork = Depends(get_unit_of_work),
     evaluator: AnswerEvaluator = Depends(get_answer_evaluator),
     llm_grader: LLMRubricGrader | None = Depends(get_llm_grader),
+    chunk_search: ChunkSearchPort | None = Depends(get_chunk_search),
 ) -> EventSourceResponse:
     """Submit an answer for grading, streaming live LLM feedback via SSE.
 
@@ -98,7 +105,9 @@ async def submit_answer_stream(
     started streaming by the time grading can fail, so the status code is
     fixed at 200 once the connection opens.
     """
-    use_case = SubmitAnswerStreaming(uow, evaluator=evaluator, llm_grader=llm_grader)
+    use_case = SubmitAnswerStreaming(
+        uow, evaluator=evaluator, llm_grader=llm_grader, chunk_search=chunk_search
+    )
 
     async def event_generator() -> AsyncIterator[dict[str, str]]:
         try:
