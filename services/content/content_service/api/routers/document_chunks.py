@@ -96,6 +96,7 @@ async def embed_pending_chunks(
     "/search",
     response_model=DocumentChunkListResponse,
     status_code=status.HTTP_200_OK,
+    operation_id="search_document_chunks",
 )
 async def search_chunks(
     query: SearchQuery,

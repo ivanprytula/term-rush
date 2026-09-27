@@ -37,6 +37,7 @@ CandidateIdPath = Annotated[int, Path(ge=1)]
     response_model=ReviewCandidateResponse,
     status_code=status.HTTP_201_CREATED,
     responses={422: {"model": ErrorResponse}},
+    operation_id="submit_review_candidate",
 )
 async def submit_candidate(
     request: SubmitReviewCandidateRequest,
@@ -58,6 +59,7 @@ async def submit_candidate(
     "",
     response_model=ReviewQueueListResponse,
     status_code=status.HTTP_200_OK,
+    operation_id="list_review_candidates",
 )
 async def list_candidates(
     review_status: ReviewStatusQuery = ReviewStatus.PENDING,
@@ -79,6 +81,7 @@ async def list_candidates(
         404: {"model": ErrorResponse},
         409: {"model": ReviewCandidateConflictResponse},
     },
+    operation_id="approve_review_candidate",
 )
 async def approve_candidate(
     candidate_id: CandidateIdPath,
@@ -101,6 +104,7 @@ async def approve_candidate(
         404: {"model": ErrorResponse},
         409: {"model": ReviewCandidateConflictResponse},
     },
+    operation_id="reject_review_candidate",
 )
 async def reject_candidate(
     candidate_id: CandidateIdPath,
