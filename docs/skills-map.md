@@ -78,7 +78,7 @@ using one.
 | Term selection strategy | ⏳ Planned | Weakness-driven priority scoring (spaced repetition, FSRS-style) — not started. Today `GetRandomTerm` is session-scoped exclusion only, not weakness-scored. |
 | Migrations | ✅ P1 | Alembic: 8 migrations tracked (initial → add term stats → drop terms → add mode denormalization → add total_score denormalization). Expand-contract pattern for destructive changes. |
 | NoSQL | ⏸️ Deferred | Plan was MongoDB for term knowledge objects. content-service shipped on Postgres instead (JSON column) when the split landed — simpler, one less datastore to operate. Access pattern turned out not to need document flexibility yet. ADR-0005 states corpus-size reversal point. |
-| Vector store | ⏳ P3 | pgvector for semantic term similarity + RAG retrieval. Deliberately *not* a separate vector DB — see ADR-0012. |
+| Vector store | ✅ P3 | pgvector `vector(384)` column on `content_service.document_chunks`, cosine-distance `ORDER BY` (`embedding.cosine_distance(...)`). Deliberately *not* a separate vector DB — see ADR-0012. Term-similarity RAG stays deferred, unchanged (ADR-0012 scopes pgvector to the document-chunk corpus only). |
 | Query performance | ⏳ P4 | `EXPLAIN ANALYZE` on leaderboard queries (multi-mode aggregation, session sum). Indexed by mode + total_score for sort efficiency. |
 
 ### CI/CD, containers, secrets, DNS/HTTPS
@@ -167,9 +167,9 @@ using one.
 | Facet | Status | Where |
 | --- | --- | --- |
 | LLM as grader, not chatbot | ✅ P2 | Structured `ClaudeRubricOutput` Pydantic model. Claude grades Boss Round answers against term expansion, returns typed rubric + feedback. Fails gracefully to deterministic grading if Claude times out or errors. `infrastructure/llm_judge.py`. |
-| RAG over the term corpus | ⏳ P3 | Not yet implemented. Plan: embed term definitions, hybrid search (vector + keyword match) to retrieve context, pass to Claude with the player's answer for grading. Would ground Claude in corpus instead of model's memory. |
-| Embedding pipeline | ⏳ P3 | Chunk → embed → pgvector → hybrid search. Deferred. pgvector extension installed but unused. |
-| Retrieval evaluation | ⏳ P3 | Recall@k on labeled test set. Deferred until retrieval is implemented. |
+| RAG over the document-chunk corpus | ✅ P3 | Term-relevant documents (`intake/documents/`) chunked, embedded, semantically searched via `GET /document-chunks/search` (content-service) and a pass-through on game-service. Wired into grading: `LLMRubricGrader` retrieves chunks keyed on the term, grounds `AnthropicJudgePort`'s prompt in a delimited `<retrieved_context>` block. Proven with a real term ("GIL"), a real corpus, and a real Claude call — see ADR-0012. Not term-*similarity* RAG (deferred, corpus too small) — this is the document corpus ADR-0018/0012 scoped it to. |
+| Embedding pipeline | ✅ P3 | Ingest → chunk (pipeline-service) → embed (ONNX/fastembed, `all-MiniLM-L6-v2`, 384-dim, CPU-only — no torch) → pgvector cosine search. `POST /document-chunks/embed` runs one bounded batch per call; `EmbedDocumentChunks` is separate from ingestion so a chunk lands keyword-searchable immediately and picks up semantic search on the next pass. |
+| Retrieval evaluation | ✅ P3 | Recall@k on a labeled golden set: `test_retrieval_eval.py`, real ONNX embedder (a fake would make Recall@k meaningless), asserts Recall@3 ≥ 0.8 across 6 queries over a 4-document corpus (3 on-topic + 1 off-topic control), CI-gating. Reports which queries missed on failure, not a bare assertion. |
 | Cost + latency control | 🟡 P2 | LLM calls only on Boss Round (1 per 10-answer round). Caching: identical answers use cached grade. Streaming UI shows feedback as tokens arrive. Model tiering (cheap → expensive for high-value rounds) deferred. |
 
 ### Agentic workflows and tool use (MCP)
@@ -185,7 +185,7 @@ using one.
 
 | Facet | Status | Where |
 | --- | --- | --- |
-| pgvector | ⏳ P3 | HNSW index, cosine distance |
+| pgvector | ✅ P3 | Cosine distance (`<=>` via SQLAlchemy's `cosine_distance()`), plain `vector(384)` column — no HNSW/IVFFlat index yet (ADR-0012: real tuning knobs that only matter at a scale this project won't reach; noted, not solved). |
 | **Why not Pinecone/Weaviate/Qdrant** | ❌ | ADR-0012. At this corpus size (~10³ terms) a dedicated vector DB is a second datastore to operate for zero benefit. Knowing when *not* to add infrastructure is the point. The ADR states the corpus size at which I'd switch. |
 
 ### Prompt / context engineering as engineering
@@ -261,9 +261,9 @@ Each session deepens one or two focus areas, moving items from L1→L2→L3→L4
 
 | Focus | Current | Next step | Why |
 | --- | --- | --- | --- |
-| RAG pipeline | Not started | Embed term definitions; hybrid search (vector + keyword); retrieval eval (Recall@k) | Differentiator: most RAG projects never measure retrieval quality |
+| RAG pipeline | L2 (embed, retrieve, ground the judge, Recall@k eval shipped) | Hybrid search (vector + keyword) if keyword-only misses turn out common; format-agnostic ingestion already covers PDF/txt/md/docx | Differentiator: most RAG projects never measure retrieval quality — this one does, in CI |
 | Agentic workflows | L1 (pipeline exists) | Eval harness with golden term set; prevent prompt-change regressions | Agents without measurement are demos, not systems |
-| Vector databases | L0 (pgvector installed, unused) | Prove embedding quality; measure vector search latency vs keyword | Clarifies when pgvector stays (stays) vs when Pinecone enters |
+| Vector databases | L2 (pgvector in production use, no index yet) | Measure vector search latency vs keyword at current scale; add HNSW/IVFFlat once corpus size justifies it (ADR-0012) | Clarifies when pgvector stays (stays) vs when Pinecone enters |
 | Prompt versioning | L1 (in-repo) | Add CI checks for prompt drift; snapshot tests on fixed input set | Prompts are code; treat as such |
 | Cost estimation | L0 | Back-of-envelope: tokens/request, requests/session, LLM cost/MAU at scale | Matters for pitch; LLM-heavy projects need this number |
 
@@ -330,10 +330,10 @@ Use this to quickly assess whether Term Rush covers a role's expectations or to 
 
 | JD phrase | Where in Term Rush | Depth | Gap? |
 | --- | --- | --- | --- |
-| "LLM-based grading / structured output" | `infrastructure/llm_judge.py`, `domain/grading.py` (ClaudeRubricOutput Pydantic model) | L2 | Cost tracking; latency measurement; fallback validation |
-| "Prompt engineering / versioning" | `domain/rubric_prompt.py` (in-repo, versioned), snapshot tests | L2 | Add CI checks for prompt drift; golden test set |
-| "Prompt injection defense" | JSON-escaped player answers, instruction hierarchy, output schema validation | L2 | Adversarial test cases; red-team the grader |
-| "RAG / semantic search" | pgvector extension installed; not yet implemented | L0 | Implement embedding pipeline; hybrid search; Recall@k evaluation |
+| "LLM-based grading / structured output" | `infrastructure/llm_judge.py`, `domain/llm_grader.py` (`LLMJudgment` Pydantic model, forced `tool_use`) | L2 | Cost tracking; latency measurement; fallback validation |
+| "Prompt engineering / versioning" | `infrastructure/llm_judge.py` (in-repo `SYSTEM_PROMPT`/`RATIONALE_SYSTEM_PROMPT`), snapshot tests | L2 | Add CI checks for prompt drift; golden test set |
+| "Prompt injection defense" | Delimiter escaping (generalized per-tag: `student_answer` and `retrieved_context`), instruction hierarchy, output schema validation, bounds-clamping — ADR-0013 | L2 | Adversarial test cases; red-team the grader |
+| "RAG / semantic search" | Document-chunk corpus (pgvector, ONNX embeddings), `GET /document-chunks/search` on both services, grounds the LLM judge's grading prompt, Recall@k eval in CI — ADR-0012 | L2 | Hybrid search (vector + keyword); HNSW/IVFFlat index once corpus size justifies it |
 | "Cost + latency control" | LLM calls only on Boss Round (1 per 10 answers); in-memory grade cache | L1 | Measure cache hit rate; cost per session; model tiering strategy |
 | "Agentic workflows / tool use" | Dagster pipeline: extract → enrich → validate → load → review queue | L2 | Eval harness (golden terms); prevent prompt-change regressions |
 | "Human-in-the-loop workflows" | Review queue endpoint (GET, PATCH approve/reject); terms persist until approval | L2 | UI for human review; audit trail of decisions |
